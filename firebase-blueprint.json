@@ -1,0 +1,254 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "BEST Member profile",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "member", "management"] },
+        "teamId": { "type": "string" },
+        "familyId": { "type": "string" },
+        "position": { "type": "string" },
+        "membership": { "type": "string" },
+        "bio": { "type": "string" },
+        "badges": { "type": "array", "items": { "type": "string" } },
+        "gadgets": { "type": "array", "items": { "type": "string" } },
+        "achievements": { "type": "array", "items": { "type": "string" } },
+        "skills": { "type": "array", "items": { "type": "string" } },
+        "previousRoles": { "type": "array", "items": { "type": "string" } },
+        "completedTasks": { "type": "number" },
+        "activityLevel": { "type": "string" },
+        "contributionHistory": { 
+          "type": "array", 
+          "items": { 
+            "type": "object",
+            "properties": {
+              "action": { "type": "string" },
+              "date": { "type": "string" }
+            }
+          } 
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "displayName"]
+    },
+    "Gadget": {
+      "title": "Gadget",
+      "description": "Collectible item for members",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "icon": { "type": "string" },
+        "rarity": { "type": "string", "enum": ["Common", "Rare", "Epic", "Legendary"] },
+        "category": { "type": "string", "enum": ["Automatic", "Manual", "Seasonal", "Monthly", "Permanent"] },
+        "unlockCriteria": { "type": "string" }
+      },
+      "required": ["name", "rarity", "category"]
+    },
+    "Achievement": {
+      "title": "Achievement",
+      "description": "Milestone for members",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "icon": { "type": "string" },
+        "category": { "type": "string", "enum": ["Lifetime", "Monthly", "Team", "Mentoring", "Participation", "Consistency", "Leadership", "International"] }
+      },
+      "required": ["title", "category"]
+    },
+    "Family": {
+      "title": "Family",
+      "description": "Mentoring family",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "color": { "type": "string" },
+        "description": { "type": "string" },
+        "goals": { "type": "array", "items": { "type": "string" } },
+        "mentors": { "type": "array", "items": { "type": "string" } },
+        "mentees": { "type": "array", "items": { "type": "string" } },
+        "score": { "type": "number" },
+        "achievements": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "color"]
+    },
+    "Team": {
+      "title": "Team",
+      "description": "BEST Internal Team",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "mission": { "type": "string" },
+        "department": { "type": "string" },
+        "contactEmail": { "type": "string" },
+        "memberCount": { "type": "number" },
+        "eventId": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "Role": {
+      "title": "Role",
+      "description": "Internal position within a team or event",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "teamId": { "type": "string" },
+        "eventId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "responsibilities": { "type": "array", "items": { "type": "string" } },
+        "skillsRequired": { "type": "array", "items": { "type": "string" } },
+        "commitment": { "type": "string" },
+        "difficulty": { "type": "string", "enum": ["Easy", "Medium", "Hard"] },
+        "isOpen": { "type": "boolean" }
+      },
+      "required": ["title"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "Internal task for members",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "deadline": { "type": "string", "format": "date-time" },
+        "assignedMemberIds": { "type": "array", "items": { "type": "string" } },
+        "teamId": { "type": "string" },
+        "eventId": { "type": "string" },
+        "metaId": { "type": "string" },
+        "status": { "type": "string", "enum": ["Pending", "In Progress", "Completed"] }
+      },
+      "required": ["title", "status"]
+    },
+    "Meta": {
+      "title": "Meta",
+      "description": "Organizational goal/target",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "teamId": { "type": "string" },
+        "eventId": { "type": "string" },
+        "creatorId": { "type": "string" },
+        "creatorRole": { "type": "string" },
+        "deadline": { "type": "string", "format": "date-time" },
+        "progress": { "type": "number" },
+        "status": { "type": "string", "enum": ["Pending", "In Progress", "Completed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "creatorId", "status"]
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "Internal news and updates",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "authorId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "content"]
+    },
+    "Application": {
+      "title": "Application",
+      "description": "Member application for an open role",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "roleId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "rejected"] },
+        "motivation": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "roleId", "status"]
+    },
+    "BESTEvent": {
+      "title": "BESTEvent",
+      "description": "Internal or external event",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" },
+        "time": { "type": "string" },
+        "location": { "type": "string" },
+        "type": { "type": "string", "enum": ["Local", "International", "Social", "Training"] },
+        "imageUrl": { "type": "string" }
+      },
+      "required": ["title", "startDate", "endDate", "time", "location", "type"]
+    },
+    "SocialBodyMember": {
+      "title": "SocialBodyMember",
+      "description": "Member of the institutional bodies",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "role": { "type": "string" },
+        "position": { "type": "string", "enum": ["Board", "Mesa da Assembleia Geral", "Conselho Fiscal"] },
+        "photoURL": { "type": "string" },
+        "profileLink": { "type": "string" },
+        "contactDetails": { "type": "string" }
+      },
+      "required": ["userId", "role", "position"]
+    },
+    "AppContent": {
+      "title": "AppContent",
+      "description": "Static content for sidebar pages",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "text": { "type": "string" }
+      },
+      "required": ["title", "text"]
+    },
+    "GlossaryTerm": {
+      "title": "GlossaryTerm",
+      "description": "BEST terminology and acronyms",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "acronym": { "type": "string" },
+        "meaning": { "type": "string" },
+        "description": { "type": "string" }
+      },
+      "required": ["acronym", "meaning"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": { "schema": "User", "description": "User profiles" },
+    "/teams/{teamId}": { "schema": "Team", "description": "Team definitions" },
+    "/roles/{roleId}": { "schema": "Role", "description": "Role definitions" },
+    "/tasks/{taskId}": { "schema": "Task", "description": "Internal tasks" },
+    "/announcements/{announcementId}": { "schema": "Announcement", "description": "Internal announcements" },
+    "/applications/{applicationId}": { "schema": "Application", "description": "Role applications" },
+    "/events/{eventId}": { "schema": "BESTEvent", "description": "LBG and International events" },
+    "/gadgets/{gadgetId}": { "schema": "Gadget", "description": "Collectible gadgets" },
+    "/achievements/{achievementId}": { "schema": "Achievement", "description": "Member achievements" },
+    "/families/{familyId}": { "schema": "Family", "description": "Mentoring families" },
+    "/socialBodies/{memberId}": { "schema": "SocialBodyMember", "description": "Institutional body members" },
+    "/appContent/{contentId}": { "schema": "AppContent", "description": "Static page content" },
+    "/glossary/{termId}": { "schema": "GlossaryTerm", "description": "BEST Glossary terms" },
+    "/metas/{metaId}": { "schema": "Meta", "description": "Organizational goals" }
+  }
+}
