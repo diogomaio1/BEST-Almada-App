@@ -29,17 +29,47 @@ if (!isValidUrl(supabaseUrl) || !supabaseAnonKey) {
 
 // We initialize the client. In case keys are missing, we still create it with placeholders to prevent crashes,
 // but warn the developer.
-export const supabase = createClient(finalUrl, finalKey);
+export let supabase = createClient(finalUrl, finalKey);
 
-console.log("[Supabase Init] URL configured:", finalUrl, "Has Key:", !!supabaseAnonKey && supabaseAnonKey !== 'your-supabase-anon-key');
+let activeUrl = finalUrl;
+let activeHasKey = !!supabaseAnonKey && supabaseAnonKey !== 'your-supabase-anon-key';
+
+console.log("[Supabase Init] URL configured:", finalUrl, "Has Key:", activeHasKey);
 
 export const getSupabaseConfigInfo = () => {
   return {
-    url: finalUrl,
-    hasKey: !!supabaseAnonKey && supabaseAnonKey !== 'your-supabase-anon-key',
-    isPlaceholder: finalUrl.includes('your-supabase-project') || finalUrl === '',
-    rawUrl: import.meta.env.VITE_SUPABASE_URL || ''
+    url: activeUrl,
+    hasKey: activeHasKey,
+    isPlaceholder: activeUrl.includes('your-supabase-project') || activeUrl === '',
+    rawUrl: activeUrl
   };
+};
+
+export const initializeDynamicSupabase = async () => {
+  try {
+    const res = await fetch("/api/config");
+    if (res.ok) {
+      const data = await res.json();
+      let url = (data.supabaseUrl || '').trim();
+      let key = (data.supabaseAnonKey || '').trim();
+      
+      url = url.replace(/^['"]|['"]$/g, '').trim();
+      key = key.replace(/^['"]|['"]$/g, '').trim();
+
+      const isValid = url.startsWith('http://') || url.startsWith('https://');
+
+      if (isValid && key) {
+        activeUrl = url;
+        activeHasKey = true;
+        supabase = createClient(url, key);
+        console.log("[Supabase Dynamic Init] Successfully loaded server-side config!", url);
+        return true;
+      }
+    }
+  } catch (err) {
+    console.error("[Supabase Dynamic Init] Error fetching server-side credentials:", err);
+  }
+  return false;
 };
 
 /**

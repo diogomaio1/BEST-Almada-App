@@ -29,6 +29,13 @@ async function startServer() {
     res.json({ status: "ok" });
   });
 
+  app.get("/api/config", (req, res) => {
+    res.json({
+      supabaseUrl: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "",
+      supabaseAnonKey: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || ""
+    });
+  });
+
   // Automated Notification Job (Simple implementation)
   const runReminderCheck = async () => {
     console.log("[CRON] Checking for event reminders...");

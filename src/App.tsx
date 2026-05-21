@@ -61,7 +61,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 import { db } from './lib/firebase';
-import { supabase, getSupabaseConfigInfo } from './lib/supabase';
+import { supabase, getSupabaseConfigInfo, initializeDynamicSupabase } from './lib/supabase';
 import { 
   doc, 
   getDoc, 
@@ -124,6 +124,100 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { MoreHorizontal, Settings, Shield, UserCog, Info, Target, HelpCircle } from 'lucide-react';
+
+// Image Compression Helper to fit Firestore document limits (saves Base64 up to 50MB and downscales cleanly)
+const compressImageFile = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (!file.type.startsWith('image/') || file.type.includes('svg')) {
+        resolve(event.target?.result as string);
+        return;
+      }
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let width = img.width;
+        let height = img.height;
+
+        const MAX_DIMENSION = 1200;
+        if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+          if (width > height) {
+            height = Math.round((height * MAX_DIMENSION) / width);
+            width = MAX_DIMENSION;
+          } else {
+            width = Math.round((width * MAX_DIMENSION) / height);
+            height = MAX_DIMENSION;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
+          resolve(dataUrl);
+        } else {
+          resolve(event.target?.result as string);
+        }
+      };
+      img.onerror = (err) => reject(err);
+      img.src = event.target?.result as string;
+    };
+    reader.onerror = (err) => reject(err);
+    reader.readAsDataURL(file);
+  });
+};
+
+// Login Logo with guaranteed fallbacks and inline vector backup
+const LoginLogo: React.FC = () => {
+  const [logoIndex, setLogoIndex] = React.useState(0);
+  const fallbacks = [
+    "https://upload.wikimedia.org/wikipedia/commons/4/41/BEST_logo.svg",
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/BEST_logo.svg/500px-BEST_logo.svg.png",
+    "https://upload.wikimedia.org/wikipedia/commons/e/e4/BEST_logo.png",
+    "https://upload.wikimedia.org/wikipedia/commons/5/50/BESTlogo.png"
+  ];
+
+  if (logoIndex >= fallbacks.length) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center bg-red-500 rounded-3xl p-5 shadow-inner">
+        {/* Precision drawn vector representation of the official BEST propeller symbol */}
+        <svg viewBox="0 0 100 100" className="w-[85%] h-[85%] text-white fill-current animate-[pulse_3s_infinite]" id="best-inline-logo">
+          {/* Central circular core */}
+          <circle cx="50" cy="50" r="8" className="fill-white" />
+          
+          {/* Central rounded triangular ring surrounding the core */}
+          <path d="M 50 35 A 15 15 0 0 1 63 57 A 15 15 0 0 1 37 57 A 15 15 0 0 1 50 35 Z" fill="none" stroke="white" strokeWidth="4.5" strokeLinejoin="round" />
+          
+          {/* Three elegantly handcrafted curved propellor/pinwheel wing blades radiating out at 120-degree intervals */}
+          {/* Top-Right Blade */}
+          <path d="M 50 35 C 50 20, 60 10, 80 15 C 70 30, 65 40, 63 57 C 58 45, 54 38, 50 35 Z" className="fill-white" />
+          
+          {/* Bottom-Right/Downward Blade */}
+          <path d="M 63 57 C 75 65, 78 78, 65 92 C 55 80, 48 70, 37 57 C 49 57, 56 57, 63 57 Z" className="fill-white" />
+          
+          {/* Left/Top-Left Blade */}
+          <path d="M 37 57 C 22 55, 12 42, 10 21 C 25 30, 38 35, 50 35 C 43 45, 40 50, 37 57 Z" className="fill-white" />
+        </svg>
+        <span className="text-[11px] text-white/90 font-black uppercase tracking-widest mt-2" id="best-almada-label">BEST Almada</span>
+      </div>
+    );
+  }
+
+  return (
+    <img 
+      src={fallbacks[logoIndex]} 
+      onError={() => {
+        console.warn(`Logo failing to load: ${fallbacks[logoIndex]}. Attempting next source...`);
+        setLogoIndex(prev => prev + 1);
+      }}
+      alt="BEST Logo" 
+      className="w-full h-full object-contain img-fade-in transition-all duration-300"
+    />
+  );
+};
 
 // Types
 import { UserProfile, Team, Role, Task, Announcement, Application, BESTEvent, Gadget, Achievement, Family, SocialBodyMember, Meeting, GlossaryTerm, Meta } from './types';
@@ -632,128 +726,147 @@ export default function App() {
 
   // Auth Listener
   React.useEffect(() => {
+    let active = true;
+    let unsubUser: (() => void) | null = null;
+    let subscription: { unsubscribe: () => void } | null = null;
+
     // Timeout fallback to prevent being stuck on loading
     const timeoutId = setTimeout(() => {
-      if (!isAuthReady) {
+      if (!isAuthReady && active) {
         console.warn("Auth initialization timed out. Forcing ready state.");
         setLoading(false);
         setIsAuthReady(true);
       }
     }, 8000);
 
-    const config = getSupabaseConfigInfo();
-    if (config.isPlaceholder || !config.hasKey) {
-      console.log("[Auth Init] Supabase credentials not configured yet. Skipping session recovery listener.");
-      setLoading(false);
-      setIsAuthReady(true);
-      return;
-    }
+    async function initAuth() {
+      // Fetch environment config dynamically from server before listening to auth state
+      await initializeDynamicSupabase();
 
-    let unsubUser: (() => void) | null = null;
+      if (!active) return;
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      const config = getSupabaseConfigInfo();
+      if (config.isPlaceholder || !config.hasKey) {
+        console.log("[Auth Init] Supabase credentials not configured yet. Skipping session recovery listener.");
+        setLoading(false);
+        setIsAuthReady(true);
+        return;
+      }
+
       try {
-        const supabaseUser = session?.user;
-        if (supabaseUser) {
-          console.log("User authenticated via Supabase:", supabaseUser.id);
-          
-          if (unsubUser) {
-            unsubUser();
-          }
-
-          // Use onSnapshot for the current user to react to status changes (approval)
-          const userDocRef = doc(db, 'users', supabaseUser.id);
-          unsubUser = onSnapshot(userDocRef, (docSnap) => {
-            const adminEmails = [
-              'diogomaioedu@gmail.com',
-              'diogo.maio@best-eu.org',
-              'andremarquesmaio@gmail.com',
-              'best.almada@best-eu.org'
-            ];
-            
-            const isUserAdmin = supabaseUser.email && adminEmails.includes(supabaseUser.email.toLowerCase().trim());
-
-            if (docSnap.exists()) {
-              const data = docSnap.data() as UserProfile;
+        const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+          if (!active) return;
+          try {
+            const supabaseUser = session?.user;
+            if (supabaseUser) {
+              console.log("User authenticated via Supabase:", supabaseUser.id);
               
-              // Force-upgrade user roles in both state and firestore for predefined administrators
-              if (isUserAdmin && (data.role !== 'admin' || data.status !== 'active')) {
-                console.log(`[Auto Admin Upgrade] Upgrading role of ${data.email} to Admin/Active...`);
-                updateDoc(userDocRef, { role: 'admin', status: 'active' }).catch(err => {
-                  console.error("Failed to automatically sync admin role to database:", err);
-                });
-                setUser({
-                  ...data,
-                  role: 'admin',
-                  status: 'active'
-                });
-              } else {
-                setUser(data);
+              if (unsubUser) {
+                unsubUser();
               }
-            } else {
-              // Handle new user creation inside onSnapshot if first time
-              console.log("Creating new user profile...");
-              const dns = supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0] || 'Membro BEST';
-              const pUrl = supabaseUser.user_metadata?.avatar_url || `https://picsum.photos/seed/${supabaseUser.id}/200`;
-              const newProfile: UserProfile = {
-                uid: supabaseUser.id,
-                displayName: dns,
-                email: supabaseUser.email || '',
-                photoURL: pUrl,
-                role: isUserAdmin ? 'admin' : 'member',
-                status: isUserAdmin ? 'active' : 'pending',
-                position: isUserAdmin ? 'President' : 'Membro',
-                membership: 'Observer',
-                privateAreaLink: '',
-                course: '',
-                interests: [],
-                badges: [],
-                gadgets: [],
-                achievements: [],
-                skills: [],
-                previousRoles: [],
-                completedTasks: 0,
-                activityLevel: 'Low',
-                contributionHistory: [],
-                createdAt: new Date().toISOString(),
-              } as any;
-              setDoc(userDocRef, newProfile).catch(err => {
-                console.error("Error creating profile:", err);
-                toast.error("Erro ao configurar perfil. Tenta novamente.");
+
+              // Use onSnapshot for the current user to react to status changes (approval)
+              const userDocRef = doc(db, 'users', supabaseUser.id);
+              unsubUser = onSnapshot(userDocRef, (docSnap) => {
+                if (!active) return;
+                const adminEmails = [
+                  'diogomaioedu@gmail.com',
+                  'diogo.maio@best-eu.org',
+                  'andremarquesmaio@gmail.com',
+                  'best.almada@best-eu.org'
+                ];
+                
+                const isUserAdmin = supabaseUser.email && adminEmails.includes(supabaseUser.email.toLowerCase().trim());
+
+                if (docSnap.exists()) {
+                  const data = docSnap.data() as UserProfile;
+                  
+                  // Force-upgrade user roles in both state and firestore for predefined administrators
+                  if (isUserAdmin && (data.role !== 'admin' || data.status !== 'active')) {
+                    console.log(`[Auto Admin Upgrade] Upgrading role of ${data.email} to Admin/Active...`);
+                    updateDoc(userDocRef, { role: 'admin', status: 'active' }).catch(err => {
+                      console.error("Failed to automatically sync admin role to database:", err);
+                    });
+                    setUser({
+                      ...data,
+                      role: 'admin',
+                      status: 'active'
+                    });
+                  } else {
+                    setUser(data);
+                  }
+                } else {
+                  // Handle new user creation inside onSnapshot if first time
+                  console.log("Creating new user profile...");
+                  const dns = supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0] || 'Membro BEST';
+                  const pUrl = supabaseUser.user_metadata?.avatar_url || `https://picsum.photos/seed/${supabaseUser.id}/200`;
+                  const newProfile: UserProfile = {
+                    uid: supabaseUser.id,
+                    displayName: dns,
+                    email: supabaseUser.email || '',
+                    photoURL: pUrl,
+                    role: isUserAdmin ? 'admin' : 'member',
+                    status: isUserAdmin ? 'active' : 'pending',
+                    position: isUserAdmin ? 'President' : 'Membro',
+                    membership: 'Observer',
+                    privateAreaLink: '',
+                    course: '',
+                    interests: [],
+                    badges: [],
+                    gadgets: [],
+                    achievements: [],
+                    skills: [],
+                    previousRoles: [],
+                    completedTasks: 0,
+                    activityLevel: 'Low',
+                    contributionHistory: [],
+                    createdAt: new Date().toISOString(),
+                  } as any;
+                  setDoc(userDocRef, newProfile).catch(err => {
+                    console.error("Error creating profile:", err);
+                    toast.error("Erro ao configurar perfil. Tenta novamente.");
+                  });
+                  setUser(newProfile);
+                }
+                setLoading(false);
+                setIsAuthReady(true);
+                clearTimeout(timeoutId);
               });
-              setUser(newProfile);
+            } else {
+              console.log("No user authenticated.");
+              if (unsubUser) {
+                unsubUser();
+                unsubUser = null;
+              }
+              setUser(null);
+              setLoading(false);
+              setIsAuthReady(true);
+              clearTimeout(timeoutId);
             }
+          } catch (error) {
+            console.error("Auth listener session change handling error:", error);
             setLoading(false);
             setIsAuthReady(true);
             clearTimeout(timeoutId);
-          });
-        } else {
-          console.log("No user authenticated.");
-          if (unsubUser) {
-            unsubUser();
-            unsubUser = null;
           }
-          setUser(null);
-          setLoading(false);
-          setIsAuthReady(true);
-          clearTimeout(timeoutId);
-        }
+        });
+
+        subscription = data.subscription;
       } catch (error) {
-        console.error("Auth listener error:", error);
-        toast.error("Erro ao carregar perfil. Verifica a tua ligação.");
-        if (unsubUser) {
-          unsubUser();
-          unsubUser = null;
-        }
-        setUser(null);
+        console.error("Auth listener initialization error:", error);
         setLoading(false);
         setIsAuthReady(true);
         clearTimeout(timeoutId);
       }
-    });
+    }
+
+    initAuth();
 
     return () => {
-      subscription.unsubscribe();
+      active = false;
+      if (subscription) {
+        subscription.unsubscribe();
+      }
       if (unsubUser) {
         unsubUser();
       }
@@ -1092,29 +1205,25 @@ export default function App() {
     const file = e.target.files?.[0];
     if (!file) return;
     
-    // Check file size (limit to 1MB for Firestore storage strings)
-    if (file.size > 1024 * 1024) {
-      toast.error('Imagem demasiado grande. O limite é 1MB.');
+    // Check file size (limit to 50MB)
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error('Imagem demasiado grande. O limite máximo é de 50MB.');
       return;
     }
 
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      try {
-        const base64String = reader.result as string;
-        // Update editForm for the current editing context
-        setEditForm(prev => ({ ...prev, photoURL: base64String } as any));
-        
-        // If we are logged in, also update the user profile in DB
-        if (user) {
-          await updateDoc(doc(db, 'users', user.uid), { photoURL: base64String });
-          toast.success('Foto de perfil atualizada!');
-        }
-      } catch (error) {
-        toast.error('Erro ao atualizar foto');
+    try {
+      const base64String = await compressImageFile(file);
+      // Update editForm for the current editing context
+      setEditForm(prev => ({ ...prev, photoURL: base64String } as any));
+      
+      // If we are logged in, also update the user profile in DB
+      if (user) {
+        await updateDoc(doc(db, 'users', user.uid), { photoURL: base64String });
+        toast.success('Foto de perfil atualizada!');
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (error) {
+      toast.error('Erro ao processar imagem.');
+    }
   };
 
   const handleAdminUpdateSocialBody = async (data: any) => {
@@ -1963,12 +2072,7 @@ export default function App() {
         <div className="relative z-10 space-y-8 flex flex-col items-center">
           <div className="space-y-6">
             <div className="mx-auto w-44 h-44 bg-white rounded-[2.5rem] shadow-2xl flex items-center justify-center p-6 border border-zinc-100">
-              <img 
-                src="https://best-eu.org/images/logo_nobg.png" 
-                onError={(e) => { e.currentTarget.src = "https://upload.wikimedia.org/wikipedia/commons/e/e0/BEST_logo.png"; }}
-                alt="BEST Almada Logo" 
-                className="w-full h-full object-contain"
-              />
+              <LoginLogo />
             </div>
             <div className="space-y-3">
               <h1 className="text-5xl font-black tracking-tighter text-zinc-900">
@@ -6717,48 +6821,51 @@ export default function App() {
     );
   };
 
-  const handleTeamImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleTeamImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 800000) {
-        toast.error('Imagem muito grande! Máximo 800KB.');
+      if (file.size > 50 * 1024 * 1024) {
+        toast.error('Imagem muito grande! O limite máximo é de 50MB.');
         return;
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setTeamForm({ ...teamForm, imageUrl: reader.result as string });
-      };
-      reader.readAsDataURL(file);
+      try {
+        const base64String = await compressImageFile(file);
+        setTeamForm({ ...teamForm, imageUrl: base64String });
+      } catch (err) {
+        toast.error('Erro ao processar imagem.');
+      }
     }
   };
 
-  const handleEventImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleEventImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 800000) {
-        toast.error('Imagem muito grande! Máximo 800KB.');
+      if (file.size > 50 * 1024 * 1024) {
+        toast.error('Imagem muito grande! O limite máximo é de 50MB.');
         return;
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setEventForm({ ...eventForm, imageUrl: reader.result as string });
-      };
-      reader.readAsDataURL(file);
+      try {
+        const base64String = await compressImageFile(file);
+        setEventForm({ ...eventForm, imageUrl: base64String });
+      } catch (err) {
+        toast.error('Erro ao processar imagem.');
+      }
     }
   };
 
-  const handleAnnouncementImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAnnouncementImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 800000) { // Approx 800KB limit for Firestore Base64
-        toast.error('Imagem muito grande! Máximo 800KB.');
+      if (file.size > 50 * 1024 * 1024) {
+        toast.error('Imagem muito grande! O limite máximo é de 50MB.');
         return;
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAnnouncementForm({ ...announcementForm, imageUrl: reader.result as string });
-      };
-      reader.readAsDataURL(file);
+      try {
+        const base64String = await compressImageFile(file);
+        setAnnouncementForm({ ...announcementForm, imageUrl: base64String });
+      } catch (err) {
+        toast.error('Erro ao processar imagem.');
+      }
     }
   };
 
@@ -6829,18 +6936,19 @@ export default function App() {
     );
   };
 
-  const handleAnnouncementPersonPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAnnouncementPersonPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 800000) {
-        toast.error('Imagem muito grande! Máximo 800KB.');
+      if (file.size > 50 * 1024 * 1024) {
+        toast.error('Imagem muito grande! O limite máximo é de 50MB.');
         return;
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAnnouncementForm({ ...announcementForm, associatedPersonPhotoURL: reader.result as string });
-      };
-      reader.readAsDataURL(file);
+      try {
+        const base64String = await compressImageFile(file);
+        setAnnouncementForm({ ...announcementForm, associatedPersonPhotoURL: base64String });
+      } catch (err) {
+        toast.error('Erro ao processar imagem.');
+      }
     }
   };
 
