@@ -664,8 +664,32 @@ export default function App() {
           // Use onSnapshot for the current user to react to status changes (approval)
           const userDocRef = doc(db, 'users', supabaseUser.id);
           unsubUser = onSnapshot(userDocRef, (docSnap) => {
+            const adminEmails = [
+              'diogomaioedu@gmail.com',
+              'diogo.maio@best-eu.org',
+              'andremarquesmaio@gmail.com',
+              'best.almada@best-eu.org'
+            ];
+            
+            const isUserAdmin = supabaseUser.email && adminEmails.includes(supabaseUser.email.toLowerCase().trim());
+
             if (docSnap.exists()) {
-              setUser(docSnap.data() as UserProfile);
+              const data = docSnap.data() as UserProfile;
+              
+              // Force-upgrade user roles in both state and firestore for predefined administrators
+              if (isUserAdmin && (data.role !== 'admin' || data.status !== 'active')) {
+                console.log(`[Auto Admin Upgrade] Upgrading role of ${data.email} to Admin/Active...`);
+                updateDoc(userDocRef, { role: 'admin', status: 'active' }).catch(err => {
+                  console.error("Failed to automatically sync admin role to database:", err);
+                });
+                setUser({
+                  ...data,
+                  role: 'admin',
+                  status: 'active'
+                });
+              } else {
+                setUser(data);
+              }
             } else {
               // Handle new user creation inside onSnapshot if first time
               console.log("Creating new user profile...");
@@ -676,9 +700,9 @@ export default function App() {
                 displayName: dns,
                 email: supabaseUser.email || '',
                 photoURL: pUrl,
-                role: (supabaseUser.email === 'diogomaioedu@gmail.com' || supabaseUser.email === 'andremarquesmaio@gmail.com' || supabaseUser.email === 'best.almada@best-eu.org') ? 'admin' : 'member',
-                status: (supabaseUser.email === 'diogomaioedu@gmail.com' || supabaseUser.email === 'andremarquesmaio@gmail.com' || supabaseUser.email === 'best.almada@best-eu.org') ? 'active' : 'pending',
-                position: 'Membro',
+                role: isUserAdmin ? 'admin' : 'member',
+                status: isUserAdmin ? 'active' : 'pending',
+                position: isUserAdmin ? 'President' : 'Membro',
                 membership: 'Observer',
                 privateAreaLink: '',
                 course: '',
@@ -1054,6 +1078,8 @@ export default function App() {
           `❌ Erro de Ligação: O teu browser não consegue contactar o Supabase no endereço "${config.url}". Garante que o URL está correto (sem espaços ou aspas) nos Secrets do AI Studio e que o teu projeto Supabase está ativo.`,
           { duration: 15000 }
         );
+      } else if (errorMessage.toLowerCase().includes('invalid login credentials')) {
+        toast.error('❌ Credenciais de login inválidas. Se é a tua primeira vez no Hub, clica em "Regista-te" abaixo para criares a tua conta.');
       } else {
         toast.error(errorMessage || 'Erro ao autenticar. Verifica os teus dados.');
       }
