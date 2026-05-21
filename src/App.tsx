@@ -1928,106 +1928,56 @@ export default function App() {
 
           <Card className="w-full max-w-sm border-none shadow-2xl bg-white rounded-[2rem] overflow-hidden">
             <CardContent className="p-8 pt-10 space-y-6">
-              {/* Login Method Selector */}
-              <div className="flex bg-zinc-100 p-1 rounded-2xl gap-1">
-                <button
-                  type="button"
-                  onClick={() => setLoginMode('google')}
-                  className={cn(
-                    "flex-1 py-3 text-xs font-black uppercase tracking-wider rounded-xl transition-all",
-                    loginMode === 'google' 
-                      ? "bg-white text-zinc-900 shadow-sm" 
-                      : "text-zinc-400 hover:text-zinc-600"
-                  )}
-                >
-                  OAuth Google
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLoginMode('email')}
-                  className={cn(
-                    "flex-1 py-3 text-xs font-black uppercase tracking-wider rounded-xl transition-all",
-                    loginMode === 'email' 
-                      ? "bg-white text-zinc-900 shadow-sm" 
-                      : "text-zinc-400 hover:text-zinc-600"
-                  )}
-                >
-                  E-mail e Senha
-                </button>
-              </div>
-
-              {loginMode === 'google' ? (
-                <div className="space-y-4">
-                  <Button 
-                    onClick={handleLogin} 
-                    disabled={loading}
-                    className="w-full bg-red-600 hover:bg-red-700 h-14 text-lg font-bold shadow-xl shadow-red-100 transition-all active:scale-95 rounded-2xl flex items-center justify-center gap-3"
-                  >
-                    {loading ? (
-                      <div className="h-5 w-5 border-2 border-white/30 border-t-white animate-spin rounded-full" />
-                    ) : (
-                      <>
-                        <Globe className="h-5 w-5" />
-                        <span>Entrar no Hub</span>
-                      </>
-                    )}
-                  </Button>
-                  <p className="text-[11px] text-zinc-400 text-center leading-relaxed font-semibold">
-                    Faz login seguro através da tua conta Google para acederes diretamente.
-                  </p>
+              <form onSubmit={handleEmailAuth} className="space-y-4 text-left">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">E-mail</label>
+                  <input
+                    type="email"
+                    value={emailAuth}
+                    onChange={(e) => setEmailAuth(e.target.value)}
+                    placeholder="diogo.maio@best-eu.org"
+                    required
+                    className="w-full h-12 px-4 rounded-xl bg-zinc-50 border border-zinc-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all text-zinc-800"
+                  />
                 </div>
-              ) : (
-                <form onSubmit={handleEmailAuth} className="space-y-4 text-left">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">E-mail</label>
-                    <input
-                      type="email"
-                      value={emailAuth}
-                      onChange={(e) => setEmailAuth(e.target.value)}
-                      placeholder="membro@best-almada.org"
-                      required
-                      className="w-full h-12 px-4 rounded-xl bg-zinc-50 border border-zinc-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all text-zinc-800"
-                    />
-                  </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Senha</label>
-                    <input
-                      type="password"
-                      value={passwordAuth}
-                      onChange={(e) => setPasswordAuth(e.target.value)}
-                      placeholder="••••••••"
-                      required
-                      className="w-full h-12 px-4 rounded-xl bg-zinc-50 border border-zinc-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all text-zinc-800"
-                    />
-                  </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Senha</label>
+                  <input
+                    type="password"
+                    value={passwordAuth}
+                    onChange={(e) => setPasswordAuth(e.target.value)}
+                    placeholder="••••••••"
+                    required
+                    className="w-full h-12 px-4 rounded-xl bg-zinc-50 border border-zinc-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all text-zinc-800"
+                  />
+                </div>
 
-                  <Button 
-                    type="submit"
-                    disabled={loading}
-                    className="w-full bg-red-600 hover:bg-red-700 h-14 text-lg font-bold shadow-xl shadow-red-100 transition-all active:scale-95 rounded-2xl flex items-center justify-center gap-3 mt-2"
+                <Button 
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-red-600 hover:bg-red-700 h-14 text-lg font-bold shadow-xl shadow-red-100 transition-all active:scale-95 rounded-2xl flex items-center justify-center gap-3 mt-2"
+                >
+                  {loading ? (
+                    <div className="h-5 w-5 border-2 border-white/30 border-t-white animate-spin rounded-full" />
+                  ) : (
+                    <>
+                      <Mail className="h-5 w-5" />
+                      <span>{isSignUp ? 'Criar Conta e Entrar' : 'Iniciar Sessão'}</span>
+                    </>
+                  )}
+                </Button>
+
+                <div className="text-center pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setIsSignUp(!isSignUp)}
+                    className="text-xs text-red-600 hover:underline font-bold transition-all"
                   >
-                    {loading ? (
-                      <div className="h-5 w-5 border-2 border-white/30 border-t-white animate-spin rounded-full" />
-                    ) : (
-                      <>
-                        <Mail className="h-5 w-5" />
-                        <span>{isSignUp ? 'Criar Conta e Entrar' : 'Iniciar Sessão'}</span>
-                      </>
-                    )}
-                  </Button>
-
-                  <div className="text-center pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setIsSignUp(!isSignUp)}
-                      className="text-xs text-red-600 hover:underline font-bold transition-all"
-                    >
-                      {isSignUp ? 'Já tens conta? Iniciar Sessão' : 'Primeira vez no Hub? Regista-te'}
-                    </button>
-                  </div>
-                </form>
-              )}
+                    {isSignUp ? 'Já tens conta? Iniciar Sessão' : 'Primeira vez no Hub? Regista-te'}
+                  </button>
+                </div>
+              </form>
 
               <div className="flex items-center gap-2 text-[10px] text-zinc-400 font-bold uppercase tracking-widest justify-center">
                 <div className="h-[1px] flex-1 bg-zinc-100" />
