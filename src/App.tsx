@@ -61,7 +61,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 import { db } from './lib/firebase';
-import { supabase } from './lib/supabase';
+import { supabase, getSupabaseConfigInfo } from './lib/supabase';
 import { 
   doc, 
   getDoc, 
@@ -641,6 +641,14 @@ export default function App() {
       }
     }, 8000);
 
+    const config = getSupabaseConfigInfo();
+    if (config.isPlaceholder || !config.hasKey) {
+      console.log("[Auth Init] Supabase credentials not configured yet. Skipping session recovery listener.");
+      setLoading(false);
+      setIsAuthReady(true);
+      return;
+    }
+
     let unsubUser: (() => void) | null = null;
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -996,6 +1004,17 @@ export default function App() {
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Check if Supabase keys are configured properly
+    const config = getSupabaseConfigInfo();
+    if (config.isPlaceholder || !config.hasKey) {
+      toast.error(
+        '⚠️ Configuração em falta: Por favor, define as variáveis de ambiente "VITE_SUPABASE_URL" e "VITE_SUPABASE_ANON_KEY" no painel de Definições (Secrets) no AI Studio para ativar o login.',
+        { duration: 10000 }
+      );
+      return;
+    }
+
     if (!emailAuth || !passwordAuth) {
       toast.error('Por favor, preenche todos os campos.');
       return;
@@ -1028,7 +1047,16 @@ export default function App() {
       }
     } catch (error: any) {
       console.error("Email auth error:", error);
-      toast.error(error.message || 'Erro ao autenticar. Verifica os teus dados.');
+      
+      const errorMessage = error?.message || String(error);
+      if (errorMessage.includes('Failed to fetch') || errorMessage.includes('fetch')) {
+        toast.error(
+          `❌ Erro de Ligação: O teu browser não consegue contactar o Supabase no endereço "${config.url}". Garante que o URL está correto (sem espaços ou aspas) nos Secrets do AI Studio e que o teu projeto Supabase está ativo.`,
+          { duration: 15000 }
+        );
+      } else {
+        toast.error(errorMessage || 'Erro ao autenticar. Verifica os teus dados.');
+      }
     } finally {
       setLoading(false);
     }

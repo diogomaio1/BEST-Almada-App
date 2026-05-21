@@ -31,6 +31,17 @@ if (!isValidUrl(supabaseUrl) || !supabaseAnonKey) {
 // but warn the developer.
 export const supabase = createClient(finalUrl, finalKey);
 
+console.log("[Supabase Init] URL configured:", finalUrl, "Has Key:", !!supabaseAnonKey && supabaseAnonKey !== 'your-supabase-anon-key');
+
+export const getSupabaseConfigInfo = () => {
+  return {
+    url: finalUrl,
+    hasKey: !!supabaseAnonKey && supabaseAnonKey !== 'your-supabase-anon-key',
+    isPlaceholder: finalUrl.includes('your-supabase-project') || finalUrl === '',
+    rawUrl: import.meta.env.VITE_SUPABASE_URL || ''
+  };
+};
+
 /**
  * Types helper matching our Supabase schema
  */

@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -5,6 +6,9 @@ import { createServer as createViteServer } from "vite";
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, getDocs, addDoc, query, where, serverTimestamp } from 'firebase/firestore';
 import fs from 'fs';
+
+// Print available process environment keys for diagnostics
+console.log("[ENV DIAGNOSTIC] Available environment keys:", Object.keys(process.env).filter(k => k.includes("SUPABASE") || k.includes("URL") || k.includes("KEY")));
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
