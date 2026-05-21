@@ -60,8 +60,8 @@ import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
-import { auth, db, googleProvider } from './lib/firebase';
-import { signInWithPopup, onAuthStateChanged, signOut } from 'firebase/auth';
+import { db } from './lib/firebase';
+import { supabase } from './lib/supabase';
 import { 
   doc, 
   getDoc, 
@@ -158,15 +158,12 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData?.map(provider => ({
-        providerId: provider.providerId,
-        email: provider.email,
-      })) || []
+      userId: undefined,
+      email: undefined,
+      emailVerified: undefined,
+      isAnonymous: undefined,
+      tenantId: undefined,
+      providerInfo: []
     },
     operationType,
     path
@@ -356,6 +353,12 @@ export default function App() {
   const [user, setUser] = React.useState<UserProfile | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [isAuthReady, setIsAuthReady] = React.useState(false);
+
+  // Supabase specific auth state
+  const [loginMode, setLoginMode] = React.useState<'google' | 'email'>('google');
+  const [emailAuth, setEmailAuth] = React.useState('');
+  const [passwordAuth, setPasswordAuth] = React.useState('');
+  const [isSignUp, setIsSignUp] = React.useState(false);
 
   // Real data states
   const [teams, setTeams] = React.useState<Team[]>([]);
@@ -638,26 +641,35 @@ export default function App() {
       }
     }, 8000);
 
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    let unsubUser: (() => void) | null = null;
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       try {
-        if (firebaseUser) {
-          console.log("User authenticated:", firebaseUser.uid);
+        const supabaseUser = session?.user;
+        if (supabaseUser) {
+          console.log("User authenticated via Supabase:", supabaseUser.id);
           
+          if (unsubUser) {
+            unsubUser();
+          }
+
           // Use onSnapshot for the current user to react to status changes (approval)
-          const userDocRef = doc(db, 'users', firebaseUser.uid);
-          const unsubUser = onSnapshot(userDocRef, (doc) => {
-            if (doc.exists()) {
-              setUser(doc.data() as UserProfile);
+          const userDocRef = doc(db, 'users', supabaseUser.id);
+          unsubUser = onSnapshot(userDocRef, (docSnap) => {
+            if (docSnap.exists()) {
+              setUser(docSnap.data() as UserProfile);
             } else {
               // Handle new user creation inside onSnapshot if first time
               console.log("Creating new user profile...");
+              const dns = supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0] || 'Membro BEST';
+              const pUrl = supabaseUser.user_metadata?.avatar_url || `https://picsum.photos/seed/${supabaseUser.id}/200`;
               const newProfile: UserProfile = {
-                uid: firebaseUser.uid,
-                displayName: firebaseUser.displayName || 'Membro BEST',
-                email: firebaseUser.email || '',
-                photoURL: firebaseUser.photoURL || `https://picsum.photos/seed/${firebaseUser.uid}/200`,
-                role: (firebaseUser.email === 'diogomaioedu@gmail.com' || firebaseUser.email === 'andremarquesmaio@gmail.com' || firebaseUser.email === 'best.almada@best-eu.org') ? 'admin' : 'member',
-                status: (firebaseUser.email === 'diogomaioedu@gmail.com' || firebaseUser.email === 'andremarquesmaio@gmail.com' || firebaseUser.email === 'best.almada@best-eu.org') ? 'active' : 'pending',
+                uid: supabaseUser.id,
+                displayName: dns,
+                email: supabaseUser.email || '',
+                photoURL: pUrl,
+                role: (supabaseUser.email === 'diogomaioedu@gmail.com' || supabaseUser.email === 'andremarquesmaio@gmail.com' || supabaseUser.email === 'best.almada@best-eu.org') ? 'admin' : 'member',
+                status: (supabaseUser.email === 'diogomaioedu@gmail.com' || supabaseUser.email === 'andremarquesmaio@gmail.com' || supabaseUser.email === 'best.almada@best-eu.org') ? 'active' : 'pending',
                 position: 'Membro',
                 membership: 'Observer',
                 privateAreaLink: '',
@@ -683,10 +695,12 @@ export default function App() {
             setIsAuthReady(true);
             clearTimeout(timeoutId);
           });
-          
-          return () => unsubUser();
         } else {
           console.log("No user authenticated.");
+          if (unsubUser) {
+            unsubUser();
+            unsubUser = null;
+          }
           setUser(null);
           setLoading(false);
           setIsAuthReady(true);
@@ -695,14 +709,22 @@ export default function App() {
       } catch (error) {
         console.error("Auth listener error:", error);
         toast.error("Erro ao carregar perfil. Verifica a tua ligação.");
+        if (unsubUser) {
+          unsubUser();
+          unsubUser = null;
+        }
         setUser(null);
         setLoading(false);
         setIsAuthReady(true);
         clearTimeout(timeoutId);
       }
     });
+
     return () => {
-      unsubscribe();
+      subscription.unsubscribe();
+      if (unsubUser) {
+        unsubUser();
+      }
       clearTimeout(timeoutId);
     };
   }, [isAuthReady]);
@@ -956,18 +978,57 @@ export default function App() {
     console.log("Login initiated...");
     setLoading(true);
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      console.log("Login success:", result.user.uid);
-      toast.success(`Bem-vindo de volta, ${result.user.displayName.split(' ')[0]}! Estás dentro! 👋`);
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/`,
+        }
+      });
+      if (error) throw error;
+      toast.success('A redirecionar...');
     } catch (error: any) {
       console.error("Login error:", error);
-      if (error.code === 'auth/popup-blocked') {
-        toast.error('O login foi bloqueado pelo browser. Por favor permite popups para entrar.');
-      } else if (error.code === 'auth/cancelled-popup-request' || error.code === 'auth/popup-closed-by-user') {
-        // Ignore user cancellation
+      toast.error('Ups! Algo correu mal ao entrar com o Google. Tenta novamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEmailAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!emailAuth || !passwordAuth) {
+      toast.error('Por favor, preenche todos os campos.');
+      return;
+    }
+    setLoading(true);
+    try {
+      if (isSignUp) {
+        const { data, error } = await supabase.auth.signUp({
+          email: emailAuth,
+          password: passwordAuth,
+          options: {
+            data: {
+              full_name: emailAuth.split('@')[0],
+            }
+          }
+        });
+        if (error) throw error;
+        if (data.user && !data.session) {
+          toast.success('Conta criada! Por favor confirma o teu e-mail se necessário.');
+        } else {
+          toast.success('Parabéns! Conta criada com sucesso.');
+        }
       } else {
-        toast.error('Ups! Algo correu mal ao entrar. Tenta novamente.');
+        const { error } = await supabase.auth.signInWithPassword({
+          email: emailAuth,
+          password: passwordAuth,
+        });
+        if (error) throw error;
+        toast.success('Sessão iniciada!');
       }
+    } catch (error: any) {
+      console.error("Email auth error:", error);
+      toast.error(error.message || 'Erro ao autenticar. Verifica os teus dados.');
     } finally {
       setLoading(false);
     }
@@ -1790,7 +1851,7 @@ export default function App() {
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      await supabase.auth.signOut();
       toast.success('Sessão terminada');
     } catch (error) {
       toast.error('Erro ao sair');
@@ -1867,20 +1928,107 @@ export default function App() {
 
           <Card className="w-full max-w-sm border-none shadow-2xl bg-white rounded-[2rem] overflow-hidden">
             <CardContent className="p-8 pt-10 space-y-6">
-              <Button 
-                onClick={handleLogin} 
-                disabled={loading}
-                className="w-full bg-red-600 hover:bg-red-700 h-14 text-lg font-bold shadow-xl shadow-red-100 transition-all active:scale-95 rounded-2xl flex items-center justify-center gap-3"
-              >
-                {loading ? (
-                  <div className="h-5 w-5 border-2 border-white/30 border-t-white animate-spin rounded-full" />
-                ) : (
-                  <>
-                    <Globe className="h-5 w-5" />
-                    <span>Entrar no Hub</span>
-                  </>
-                )}
-              </Button>
+              {/* Login Method Selector */}
+              <div className="flex bg-zinc-100 p-1 rounded-2xl gap-1">
+                <button
+                  type="button"
+                  onClick={() => setLoginMode('google')}
+                  className={cn(
+                    "flex-1 py-3 text-xs font-black uppercase tracking-wider rounded-xl transition-all",
+                    loginMode === 'google' 
+                      ? "bg-white text-zinc-900 shadow-sm" 
+                      : "text-zinc-400 hover:text-zinc-600"
+                  )}
+                >
+                  OAuth Google
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLoginMode('email')}
+                  className={cn(
+                    "flex-1 py-3 text-xs font-black uppercase tracking-wider rounded-xl transition-all",
+                    loginMode === 'email' 
+                      ? "bg-white text-zinc-900 shadow-sm" 
+                      : "text-zinc-400 hover:text-zinc-600"
+                  )}
+                >
+                  E-mail e Senha
+                </button>
+              </div>
+
+              {loginMode === 'google' ? (
+                <div className="space-y-4">
+                  <Button 
+                    onClick={handleLogin} 
+                    disabled={loading}
+                    className="w-full bg-red-600 hover:bg-red-700 h-14 text-lg font-bold shadow-xl shadow-red-100 transition-all active:scale-95 rounded-2xl flex items-center justify-center gap-3"
+                  >
+                    {loading ? (
+                      <div className="h-5 w-5 border-2 border-white/30 border-t-white animate-spin rounded-full" />
+                    ) : (
+                      <>
+                        <Globe className="h-5 w-5" />
+                        <span>Entrar no Hub</span>
+                      </>
+                    )}
+                  </Button>
+                  <p className="text-[11px] text-zinc-400 text-center leading-relaxed font-semibold">
+                    Faz login seguro através da tua conta Google para acederes diretamente.
+                  </p>
+                </div>
+              ) : (
+                <form onSubmit={handleEmailAuth} className="space-y-4 text-left">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">E-mail</label>
+                    <input
+                      type="email"
+                      value={emailAuth}
+                      onChange={(e) => setEmailAuth(e.target.value)}
+                      placeholder="membro@best-almada.org"
+                      required
+                      className="w-full h-12 px-4 rounded-xl bg-zinc-50 border border-zinc-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all text-zinc-800"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Senha</label>
+                    <input
+                      type="password"
+                      value={passwordAuth}
+                      onChange={(e) => setPasswordAuth(e.target.value)}
+                      placeholder="••••••••"
+                      required
+                      className="w-full h-12 px-4 rounded-xl bg-zinc-50 border border-zinc-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all text-zinc-800"
+                    />
+                  </div>
+
+                  <Button 
+                    type="submit"
+                    disabled={loading}
+                    className="w-full bg-red-600 hover:bg-red-700 h-14 text-lg font-bold shadow-xl shadow-red-100 transition-all active:scale-95 rounded-2xl flex items-center justify-center gap-3 mt-2"
+                  >
+                    {loading ? (
+                      <div className="h-5 w-5 border-2 border-white/30 border-t-white animate-spin rounded-full" />
+                    ) : (
+                      <>
+                        <Mail className="h-5 w-5" />
+                        <span>{isSignUp ? 'Criar Conta e Entrar' : 'Iniciar Sessão'}</span>
+                      </>
+                    )}
+                  </Button>
+
+                  <div className="text-center pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setIsSignUp(!isSignUp)}
+                      className="text-xs text-red-600 hover:underline font-bold transition-all"
+                    >
+                      {isSignUp ? 'Já tens conta? Iniciar Sessão' : 'Primeira vez no Hub? Regista-te'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
               <div className="flex items-center gap-2 text-[10px] text-zinc-400 font-bold uppercase tracking-widest justify-center">
                 <div className="h-[1px] flex-1 bg-zinc-100" />
                 <span>Só para membros verificados</span>
@@ -1925,7 +2073,7 @@ export default function App() {
         <div className="flex flex-col gap-3 w-full max-w-xs">
           <Button 
             variant="outline" 
-            onClick={() => auth.signOut()}
+            onClick={handleLogout}
             className="w-full rounded-2xl font-bold h-12"
           >
             Sair da Conta
@@ -7173,7 +7321,7 @@ export default function App() {
           <Button 
             variant="outline" 
             className="rounded-2xl h-12 px-8 border-zinc-200 text-zinc-500 font-black uppercase tracking-widest hover:bg-zinc-50 transition-all" 
-            onClick={() => auth.signOut()}
+            onClick={handleLogout}
           >
             Sair da Conta
           </Button>

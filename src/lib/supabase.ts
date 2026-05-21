@@ -2,22 +2,34 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+let supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
+let supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
 
-if (!supabaseUrl || !supabaseAnonKey) {
+// Strip any literal surrounding quotes if present in env strings
+supabaseUrl = supabaseUrl.replace(/^['"]|['"]$/g, '').trim();
+supabaseAnonKey = supabaseAnonKey.replace(/^['"]|['"]$/g, '').trim();
+
+const isValidUrl = (url: string) => {
+  try {
+    return url.startsWith('http://') || url.startsWith('https://');
+  } catch {
+    return false;
+  }
+};
+
+const finalUrl = isValidUrl(supabaseUrl) ? supabaseUrl : 'https://your-supabase-project.supabase.co';
+const finalKey = supabaseAnonKey || 'your-supabase-anon-key';
+
+if (!isValidUrl(supabaseUrl) || !supabaseAnonKey) {
   console.warn(
-    'Supabase environment variables (VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY) are missing. ' +
+    'Supabase environment variables (VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY) are missing or invalid. ' +
     'Please configure them in your environment settings.'
   );
 }
 
 // We initialize the client. In case keys are missing, we still create it with placeholders to prevent crashes,
 // but warn the developer.
-export const supabase = createClient(
-  supabaseUrl || 'https://your-supabase-project.supabase.co',
-  supabaseAnonKey || 'your-supabase-anon-key'
-);
+export const supabase = createClient(finalUrl, finalKey);
 
 /**
  * Types helper matching our Supabase schema
