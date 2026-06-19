@@ -60,7 +60,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
-import { db } from './lib/firebase';
+import { db, auth } from './lib/firebase';
 import { supabase, getSupabaseConfigInfo, initializeDynamicSupabase } from './lib/supabase';
 import { 
   doc, 
@@ -746,10 +746,112 @@ export default function App() {
       if (!active) return;
 
       const config = getSupabaseConfigInfo();
-      if (config.isPlaceholder || !config.hasKey) {
-        console.log("[Auth Init] Supabase credentials not configured yet. Skipping session recovery listener.");
-        setLoading(false);
-        setIsAuthReady(true);
+      const isFirebaseFallback = config.isPlaceholder || !config.hasKey;
+
+      if (isFirebaseFallback) {
+        console.log("[Auth Init] Supabase credentials not configured yet. Falling back to native Firebase Auth.");
+        try {
+          const { onAuthStateChanged } = await import('firebase/auth');
+          const unsubFirebase = onAuthStateChanged(auth, async (firebaseUser) => {
+            if (!active) return;
+            try {
+              if (firebaseUser) {
+                console.log("User authenticated via Firebase Auth:", firebaseUser.uid);
+                
+                if (unsubUser) {
+                  unsubUser();
+                }
+
+                const userDocRef = doc(db, 'users', firebaseUser.uid);
+                unsubUser = onSnapshot(userDocRef, (docSnap) => {
+                  if (!active) return;
+                  const adminEmails = [
+                    'diogomaioedu@gmail.com',
+                    'diogo.maio@best-eu.org',
+                    'andremarquesmaio@gmail.com',
+                    'best.almada@best-eu.org'
+                  ];
+                  
+                  const isUserAdmin = firebaseUser.email && adminEmails.includes(firebaseUser.email.toLowerCase().trim());
+
+                  if (docSnap.exists()) {
+                    const data = docSnap.data() as UserProfile;
+                    
+                    if (isUserAdmin && (data.role !== 'admin' || data.status !== 'active')) {
+                      console.log(`[Auto Admin Upgrade] Upgrading role of ${data.email} to Admin/Active...`);
+                      updateDoc(userDocRef, { role: 'admin', status: 'active' }).catch(err => {
+                        console.error("Failed to automatically sync admin role to database:", err);
+                      });
+                      setUser({
+                        ...data,
+                        role: 'admin',
+                        status: 'active'
+                      });
+                    } else {
+                      setUser(data);
+                    }
+                  } else {
+                    console.log("Creating new user profile (Firebase)...");
+                    const dns = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Membro BEST';
+                    const pUrl = firebaseUser.photoURL || `https://picsum.photos/seed/${firebaseUser.uid}/200`;
+                    const newProfile: UserProfile = {
+                      uid: firebaseUser.uid,
+                      displayName: dns,
+                      email: firebaseUser.email || '',
+                      photoURL: pUrl,
+                      role: isUserAdmin ? 'admin' : 'member',
+                      status: isUserAdmin ? 'active' : 'pending',
+                      position: isUserAdmin ? 'President' : 'Membro',
+                      membership: 'Observer',
+                      privateAreaLink: '',
+                      course: '',
+                      interests: [],
+                      badges: [],
+                      gadgets: [],
+                      achievements: [],
+                      skills: [],
+                      previousRoles: [],
+                      completedTasks: 0,
+                      activityLevel: 'Low',
+                      contributionHistory: [],
+                      createdAt: new Date().toISOString(),
+                    } as any;
+                    setDoc(userDocRef, newProfile).catch(err => {
+                      console.error("Error creating profile:", err);
+                      toast.error("Erro ao configurar perfil. Tenta novamente.");
+                    });
+                    setUser(newProfile);
+                  }
+                  setLoading(false);
+                  setIsAuthReady(true);
+                  clearTimeout(timeoutId);
+                });
+              } else {
+                console.log("No user authenticated via Firebase.");
+                if (unsubUser) {
+                  unsubUser();
+                  unsubUser = null;
+                }
+                setUser(null);
+                setLoading(false);
+                setIsAuthReady(true);
+                clearTimeout(timeoutId);
+              }
+            } catch (error) {
+              console.error("Firebase auth handler user change handling error:", error);
+              setLoading(false);
+              setIsAuthReady(true);
+              clearTimeout(timeoutId);
+            }
+          });
+
+          subscription = { unsubscribe: unsubFirebase };
+        } catch (error) {
+          console.error("Firebase auth listener initialization error:", error);
+          setLoading(false);
+          setIsAuthReady(true);
+          clearTimeout(timeoutId);
+        }
         return;
       }
 
@@ -1144,13 +1246,7 @@ export default function App() {
     
     // Check if Supabase keys are configured properly
     const config = getSupabaseConfigInfo();
-    if (config.isPlaceholder || !config.hasKey) {
-      toast.error(
-        '⚠️ Configuração em falta: Por favor, define as variáveis de ambiente "VITE_SUPABASE_URL" e "VITE_SUPABASE_ANON_KEY" no painel de Definições (Secrets) no AI Studio para ativar o login.',
-        { duration: 10000 }
-      );
-      return;
-    }
+    const useFirebase = config.isPlaceholder || !config.hasKey;
 
     if (!emailAuth || !passwordAuth) {
       toast.error('Por favor, preenche todos os campos.');
@@ -1158,43 +1254,80 @@ export default function App() {
     }
     setLoading(true);
     try {
-      if (isSignUp) {
-        const { data, error } = await supabase.auth.signUp({
-          email: emailAuth,
-          password: passwordAuth,
-          options: {
-            data: {
-              full_name: emailAuth.split('@')[0],
-            }
+      if (useFirebase) {
+        const { 
+          signInWithEmailAndPassword, 
+          createUserWithEmailAndPassword,
+          updateProfile
+        } = await import('firebase/auth');
+
+        if (isSignUp) {
+          const userCred = await createUserWithEmailAndPassword(auth, emailAuth, passwordAuth);
+          try {
+            await updateProfile(userCred.user, {
+              displayName: emailAuth.split('@')[0]
+            });
+          } catch (initErr) {
+            console.warn("Failed to set display name in auth profile:", initErr);
           }
-        });
-        if (error) throw error;
-        if (data.user && !data.session) {
-          toast.success('Conta criada! Por favor confirma o teu e-mail se necessário.');
+          toast.success('Parabéns! Conta criada com sucesso via Firebase.');
         } else {
-          toast.success('Parabéns! Conta criada com sucesso.');
+          await signInWithEmailAndPassword(auth, emailAuth, passwordAuth);
+          toast.success('Sessão iniciada via Firebase!');
         }
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: emailAuth,
-          password: passwordAuth,
-        });
-        if (error) throw error;
-        toast.success('Sessão iniciada!');
+        if (isSignUp) {
+          const { data, error } = await supabase.auth.signUp({
+            email: emailAuth,
+            password: passwordAuth,
+            options: {
+              data: {
+                full_name: emailAuth.split('@')[0],
+              }
+            }
+          });
+          if (error) throw error;
+          if (data.user && !data.session) {
+            toast.success('Conta criada! Por favor confirma o teu e-mail se necessário.');
+          } else {
+            toast.success('Parabéns! Conta criada com sucesso.');
+          }
+        } else {
+          const { error } = await supabase.auth.signInWithPassword({
+            email: emailAuth,
+            password: passwordAuth,
+          });
+          if (error) throw error;
+          toast.success('Sessão iniciada!');
+        }
       }
     } catch (error: any) {
       console.error("Email auth error:", error);
       
       const errorMessage = error?.message || String(error);
-      if (errorMessage.includes('Failed to fetch') || errorMessage.includes('fetch')) {
-        toast.error(
-          `❌ Erro de Ligação: O teu browser não consegue contactar o Supabase no endereço "${config.url}". Garante que o URL está correto (sem espaços ou aspas) nos Secrets do AI Studio e que o teu projeto Supabase está ativo.`,
-          { duration: 15000 }
-        );
-      } else if (errorMessage.toLowerCase().includes('invalid login credentials')) {
-        toast.error('❌ Credenciais de login inválidas. Se é a tua primeira vez no Hub, clica em "Regista-te" abaixo para criares a tua conta.');
+      if (useFirebase) {
+        if (errorMessage.includes('auth/invalid-credential') || errorMessage.includes('invalid-login-credentials')) {
+          toast.error('❌ Credenciais de login inválidas. Se é a tua primeira vez no Hub, clica em "Regista-te" abaixo para criares a tua conta.');
+        } else if (errorMessage.includes('auth/email-already-in-use')) {
+          toast.error('❌ Este e-mail já está a ser utilizado por outra conta.');
+        } else if (errorMessage.includes('auth/weak-password')) {
+          toast.error('❌ A senha deve conter pelo menos 6 caracteres.');
+        } else if (errorMessage.includes('auth/invalid-email')) {
+          toast.error('❌ O e-mail de utilizador introduzido é inválido.');
+        } else {
+          toast.error(errorMessage || 'Erro ao autenticar no Firebase.');
+        }
       } else {
-        toast.error(errorMessage || 'Erro ao autenticar. Verifica os teus dados.');
+        if (errorMessage.includes('Failed to fetch') || errorMessage.includes('fetch')) {
+          toast.error(
+            `❌ Erro de Ligação: O teu browser não consegue contactar o Supabase no endereço "${config.url}". Garante que o URL está correto (sem espaços ou aspas) nos Secrets do AI Studio e que o teu projeto Supabase está ativo.`,
+            { duration: 15000 }
+          );
+        } else if (errorMessage.toLowerCase().includes('invalid login credentials')) {
+          toast.error('❌ Credenciais de login inválidas. Se é a tua primeira vez no Hub, clica em "Regista-te" abaixo para criares a tua conta.');
+        } else {
+          toast.error(errorMessage || 'Erro ao autenticar. Verifica os teus dados.');
+        }
       }
     } finally {
       setLoading(false);
@@ -2014,7 +2147,13 @@ export default function App() {
 
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut();
+      const config = getSupabaseConfigInfo();
+      if (config.isPlaceholder || !config.hasKey) {
+        const { signOut } = await import('firebase/auth');
+        await signOut(auth);
+      } else {
+        await supabase.auth.signOut();
+      }
       toast.success('Sessão terminada');
     } catch (error) {
       toast.error('Erro ao sair');
@@ -2137,10 +2276,30 @@ export default function App() {
                 </div>
               </form>
 
-              <div className="flex items-center gap-2 text-[10px] text-zinc-400 font-bold uppercase tracking-widest justify-center">
-                <div className="h-[1px] flex-1 bg-zinc-100" />
-                <span>Só para membros verificados</span>
-                <div className="h-[1px] flex-1 bg-zinc-100" />
+               <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-2 text-[10px] text-zinc-400 font-bold uppercase tracking-widest justify-center">
+                  <div className="h-[1px] flex-1 bg-zinc-100" />
+                  <span>Só para membros verificados</span>
+                  <div className="h-[1px] flex-1 bg-zinc-100" />
+                </div>
+                
+                <div className="pt-1 text-center">
+                  {(() => {
+                    const config = getSupabaseConfigInfo();
+                    const isFirebase = config.isPlaceholder || !config.hasKey;
+                    return (
+                      <span className={cn(
+                        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider shadow-sm",
+                        isFirebase 
+                          ? "bg-amber-50 text-amber-700 border border-amber-200/50" 
+                          : "bg-emerald-50 text-emerald-700 border border-emerald-200/50"
+                      )}>
+                        <span className={cn("h-1.5 w-1.5 rounded-full animate-pulse", isFirebase ? "bg-amber-500" : "bg-emerald-500")} />
+                        {isFirebase ? "Acesso: Firebase Auth (Nativo)" : "Acesso: Supabase (Configurado)"}
+                      </span>
+                    );
+                  })()}
+                </div>
               </div>
             </CardContent>
           </Card>
