@@ -17,7 +17,7 @@ export const supabase = new Proxy({} as any, {
 });
 
 let activeUrl = finalUrl;
-let activeHasKey = !!supabaseAnonKey && supabaseAnonKey !== 'your-supabase-anon-key';
+let activeHasKey = !!finalKey && (finalKey as string) !== 'your-supabase-anon-key';
 
 console.log("[Supabase Init] URL configured:", finalUrl, "Has Key:", activeHasKey);
 
