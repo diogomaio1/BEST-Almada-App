@@ -2,37 +2,14 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-let supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
-let supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
+// Colocamos os teus dados reais diretamente aqui para cortar intermediários
+const finalUrl = "https://efcxoqrjspnkyeqtdwiz.supabase.co";
+const finalKey = "sb_publishable_AhzhpgsAqhpr6hd9fv0rjg_NsUoMwxf";
 
-// Strip any literal surrounding quotes if present in env strings
-supabaseUrl = supabaseUrl.replace(/^['"]|['"]$/g, '').trim();
-supabaseAnonKey = supabaseAnonKey.replace(/^['"]|['"]$/g, '').trim();
-
-const isValidUrl = (url: string) => {
-  try {
-    return url.startsWith('http://') || url.startsWith('https://');
-  } catch {
-    return false;
-  }
-};
-
-const finalUrl = isValidUrl(supabaseUrl) ? supabaseUrl : 'https://your-supabase-project.supabase.co';
-const finalKey = supabaseAnonKey || 'your-supabase-anon-key';
-
-if (!isValidUrl(supabaseUrl) || !supabaseAnonKey) {
-  console.warn(
-    'Supabase environment variables (VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY) are missing or invalid. ' +
-    'Please configure them in your environment settings.'
-  );
-}
-
-// We initialize the client. In case keys are missing, we still create it with placeholders to prevent crashes,
-// but warn the developer.
+// Inicializa o cliente diretamente com as tuas chaves prontas
 let currentClient = createClient(finalUrl, finalKey);
 
-// We export a dynamic Proxy to route all attribute accesses directly to the currently active instance.
-// This bypasses any live-binding or reference caching issues caused by bundling or compilation formats.
+// Mantemos o Proxy ativo para o resto da aplicação não quebrar
 export const supabase = new Proxy({} as any, {
   get(target, prop) {
     return Reflect.get(currentClient, prop);
