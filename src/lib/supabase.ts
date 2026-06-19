@@ -29,7 +29,15 @@ if (!isValidUrl(supabaseUrl) || !supabaseAnonKey) {
 
 // We initialize the client. In case keys are missing, we still create it with placeholders to prevent crashes,
 // but warn the developer.
-export let supabase = createClient(finalUrl, finalKey);
+let currentClient = createClient(finalUrl, finalKey);
+
+// We export a dynamic Proxy to route all attribute accesses directly to the currently active instance.
+// This bypasses any live-binding or reference caching issues caused by bundling or compilation formats.
+export const supabase = new Proxy({} as any, {
+  get(target, prop) {
+    return Reflect.get(currentClient, prop);
+  }
+});
 
 let activeUrl = finalUrl;
 let activeHasKey = !!supabaseAnonKey && supabaseAnonKey !== 'your-supabase-anon-key';
@@ -61,7 +69,7 @@ export const initializeDynamicSupabase = async () => {
       if (isValid && key) {
         activeUrl = url;
         activeHasKey = true;
-        supabase = createClient(url, key);
+        currentClient = createClient(url, key);
         console.log("[Supabase Dynamic Init] Successfully loaded server-side config!", url);
         return true;
       }

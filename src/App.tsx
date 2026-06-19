@@ -747,6 +747,14 @@ export default function App() {
 
       const config = getSupabaseConfigInfo();
 
+      if (config.isPlaceholder || !config.hasKey) {
+        console.warn("[Auth Init] Supabase credentials not configured in dynamic env. Bypassing state listener to prevent connection errors.");
+        setLoading(false);
+        setIsAuthReady(true);
+        clearTimeout(timeoutId);
+        return;
+      }
+
       try {
         const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
           if (!active) return;
@@ -1138,6 +1146,14 @@ export default function App() {
     
     // Check if Supabase keys are configured properly
     const config = getSupabaseConfigInfo();
+
+    if (config.isPlaceholder || !config.hasKey) {
+      toast.error(
+        '⚠️ Configuração do Supabase Pendente: Por favor, adiciona as variáveis de ambiente VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no menu de Secrets do AI Studio.',
+        { duration: 8000 }
+      );
+      return;
+    }
 
     if (!emailAuth || !passwordAuth) {
       toast.error('Por favor, preenche todos os campos.');
