@@ -44,6 +44,8 @@ export const initializeDynamicSupabase = async () => {
       const isPlaceholder = url.includes('your-supabase-project') || key === 'your-supabase-anon-key' || !key || !url;
       const isValid = (url.startsWith('http://') || url.startsWith('https://')) && !isPlaceholder;
 
+      console.log("[Supabase Dynamic Init] Server config diagnostic:", data.diagnostics || "no-diagnostics");
+
       if (isValid && key) {
         activeUrl = url;
         activeHasKey = true;

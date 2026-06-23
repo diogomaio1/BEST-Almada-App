@@ -453,6 +453,14 @@ export default function App() {
   const [emailAuth, setEmailAuth] = React.useState('');
   const [passwordAuth, setPasswordAuth] = React.useState('');
   const [isSignUp, setIsSignUp] = React.useState(false);
+  const [serverConfigDiag, setServerConfigDiag] = React.useState<any>(null);
+
+  React.useEffect(() => {
+    fetch('/api/config')
+      .then(res => res.json())
+      .then(data => setServerConfigDiag(data))
+      .catch(err => console.error("Error loading config diagnostics:", err));
+  }, []);
 
   // Real data states
   const [teams, setTeams] = React.useState<Team[]>([]);
@@ -1196,6 +1204,11 @@ export default function App() {
         );
       } else if (errorMessage.toLowerCase().includes('invalid login credentials')) {
         toast.error('❌ Credenciais de login inválidas. Se é a tua primeira vez no Hub, clica em "Regista-te" abaixo para criares a tua conta.');
+      } else if (errorMessage.toLowerCase().includes('email not confirmed')) {
+        toast.error(
+          '❌ E-mail não verificado! Precisas de confirmar o teu e-mail antes de entrar. Verifica a tua caixa de entrada (ou pasta Spam) para encontrar o link enviado pelo Supabase. \n\n💡 Dica: No teu painel do Supabase, podes desativar isto em Authentication > Providers > Email e desativar "Confirm email".',
+          { duration: 12000 }
+        );
       } else {
         toast.error(errorMessage || 'Erro ao autenticar. Verifica os teus dados.');
       }
@@ -2147,20 +2160,85 @@ export default function App() {
                   <div className="h-[1px] flex-1 bg-zinc-100" />
                 </div>
                 
-                <div className="pt-1 text-center">
+                <div className="pt-1 flex flex-col items-center gap-2">
                   {(() => {
                     const config = getSupabaseConfigInfo();
                     const isConfigured = !config.isPlaceholder && config.hasKey;
+                    
+                    const keyString = (serverConfigDiag?.supabaseAnonKey || '').trim();
+                    const isUsingServerKeys = !!serverConfigDiag?.supabaseAnonKey;
+                    const activeKeyToCheck = isUsingServerKeys ? keyString : 'sb_publishable_AhzhpgsAqhpr6hd9fv0rjg_NsUoMwxf';
+                    
+                    const isStripeOrInvalidKey = activeKeyToCheck.startsWith('sb_publishable_') || activeKeyToCheck.startsWith('pk_');
+                    const hasDots = activeKeyToCheck.includes('.');
+                    const isPossiblyInvalidKey = isConfigured && (isStripeOrInvalidKey || !hasDots);
+
                     return (
-                      <span className={cn(
-                        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider shadow-sm",
-                        isConfigured 
-                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200/50" 
-                          : "bg-amber-50 text-amber-700 border border-amber-200/50"
-                      )}>
-                        <span className={cn("h-1.5 w-1.5 rounded-full", isConfigured ? "bg-emerald-500 animate-pulse" : "bg-amber-500")} />
-                        {isConfigured ? "Acesso: Supabase (Configurado)" : "Acesso: Supabase (Configuração Pendente)"}
-                      </span>
+                      <div className="w-full flex flex-col items-center gap-2">
+                        <span className={cn(
+                          "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider shadow-sm",
+                          isConfigured && !isPossiblyInvalidKey
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200/50" 
+                            : "bg-amber-50 text-amber-700 border border-amber-200/50"
+                        )}>
+                          <span className={cn(
+                            "h-1.5 w-1.5 rounded-full", 
+                            isConfigured && !isPossiblyInvalidKey ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
+                          )} />
+                          {isConfigured && !isPossiblyInvalidKey 
+                            ? "Acesso: Supabase (Configurado)" 
+                            : isPossiblyInvalidKey 
+                            ? "Acesso: Supabase (Chave Inválida)" 
+                            : "Acesso: Supabase (Configuração Pendente)"}
+                        </span>
+
+                        {(isPossiblyInvalidKey || !isConfigured) && (
+                          <div className="mt-2 text-left bg-zinc-50 border border-zinc-200/60 p-4 rounded-2xl w-full text-xs space-y-2.5 shadow-sm text-zinc-700">
+                            <p className="font-bold text-red-600 flex items-center gap-1">
+                              <span>⚠️ Configuração Incorreta Detetada</span>
+                            </p>
+                            
+                            {isStripeOrInvalidKey && (
+                              <p className="leading-relaxed text-[11px] text-zinc-600">
+                                A tua chave (<strong>{isUsingServerKeys ? "nos Secrets" : "no código fallback"}</strong>) começa por <code className="bg-red-50 text-red-600 px-1 py-0.5 rounded">sb_publishable_</code>. 
+                                Isto é uma chave de publicação do Stripe, <strong>não é uma chave de acesso (Anon Key) do Supabase</strong>.
+                              </p>
+                            )}
+
+                            {!hasDots && !isStripeOrInvalidKey && (
+                              <p className="leading-relaxed text-[11px] text-zinc-600">
+                                As chaves do Supabase são tokens JWT longos e têm de conter pontos (<code className="bg-zinc-100 px-1 py-0.5 rounded">.</code>). A chave atual parece incompleta ou inválida.
+                              </p>
+                            )}
+
+                            <div className="bg-white p-2.5 rounded-xl border border-zinc-100 text-[10px] space-y-1 font-mono">
+                              <div><strong>URL em uso:</strong> <span className="text-zinc-500">{config.url}</span></div>
+                              <div><strong>Origem:</strong> <span className="text-zinc-500">{isUsingServerKeys ? "Secrets do AI Studio" : "Código fallback (efcxoqrjspn...)"}</span></div>
+                              {serverConfigDiag?.diagnostics && (
+                                <>
+                                  <div><strong>Secret URL no Servidor:</strong> <span className="text-zinc-500">{serverConfigDiag.diagnostics.hasUrl ? "Sim (" + serverConfigDiag.diagnostics.maskedUrl + ")" : "Não"}</span></div>
+                                  <div><strong>Secret Key no Servidor:</strong> <span className="text-zinc-500">{serverConfigDiag.diagnostics.hasKey ? "Sim (" + serverConfigDiag.diagnostics.maskedKey + ")" : "Não"}</span></div>
+                                </>
+                              )}
+                            </div>
+
+                            <p className="leading-relaxed text-[11px] text-zinc-600 font-medium">
+                              <strong>Como corrigir:</strong>
+                              <ol className="list-decimal pl-4 mt-1 space-y-1">
+                                <li>Acede ao teu dashboard do <strong>Supabase</strong> &gt; <strong>Project Settings</strong> &gt; <strong>API</strong>.</li>
+                                <li>Copia o <strong>Project URL</strong> e a <strong>`anon` `public`</strong> key (certifica-te de que a chave começa por <code className="bg-zinc-100 px-1">eyJ...</code>).</li>
+                                <li>No menu de <strong>Secrets</strong> do AI Studio, define:
+                                  <ul className="list-disc pl-4 mt-0.5">
+                                    <li><code className="bg-zinc-100 px-1">VITE_SUPABASE_URL</code></li>
+                                    <li><code className="bg-zinc-100 px-1">VITE_SUPABASE_ANON_KEY</code></li>
+                                  </ul>
+                                </li>
+                                <li>Verifica se não há aspas extra ou espaços.</li>
+                              </ol>
+                            </p>
+                          </div>
+                        )}
+                      </div>
                     );
                   })()}
                 </div>

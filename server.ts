@@ -30,9 +30,27 @@ async function startServer() {
   });
 
   app.get("/api/config", (req, res) => {
+    const sUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "";
+    const sKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || "";
+    
+    const mask = (str: string) => {
+      if (!str) return "empty";
+      if (str.length <= 8) return "***";
+      return `${str.substring(0, 4)}...${str.substring(str.length - 4)}`;
+    };
+
     res.json({
-      supabaseUrl: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "",
-      supabaseAnonKey: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || ""
+      supabaseUrl: sUrl,
+      supabaseAnonKey: sKey,
+      diagnostics: {
+        hasUrl: !!sUrl,
+        hasKey: !!sKey,
+        urlLength: sUrl.length,
+        keyLength: sKey.length,
+        maskedUrl: mask(sUrl),
+        maskedKey: mask(sKey),
+        allKeys: Object.keys(process.env).filter(k => k.includes("SUPABASE") || k.includes("URL") || k.includes("KEY"))
+      }
     });
   });
 
