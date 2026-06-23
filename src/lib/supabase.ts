@@ -2,14 +2,31 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-// Colocamos os teus dados reais diretamente aqui para cortar intermediários
-const finalUrl = "https://efcxoqrjspnkyeqtdwiz.supabase.co";
-const finalKey = "sb_publishable_AhzhpgsAqhpr6hd9fv0rjg_NsUoMwxf";
+// O Vite vai ler estas variáveis diretamente do ambiente do AI Studio / Vercel
+let supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
+let supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
 
-// Inicializa o cliente diretamente com as tuas chaves prontas
+// Remove aspas literais se existirem por acidente
+supabaseUrl = supabaseUrl.replace(/^['"]|['"]$/g, '').trim();
+supabaseAnonKey = supabaseAnonKey.replace(/^['"]|['"]$/g, '').trim();
+
+const isValidUrl = (url: string) => {
+  try {
+    return url.startsWith('http://') || url.startsWith('https://');
+  } catch {
+    return false;
+  }
+};
+
+const finalUrl = isValidUrl(supabaseUrl) ? supabaseUrl : 'https://your-supabase-project.supabase.co';
+const finalKey = supabaseAnonKey || 'your-supabase-anon-key';
+
+if (!isValidUrl(supabaseUrl) || !supabaseAnonKey) {
+  console.warn('Supabase environment variables (VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY) are missing or invalid.');
+}
+
 let currentClient = createClient(finalUrl, finalKey);
 
-// Mantemos o Proxy ativo para o resto da aplicação não quebrar
 export const supabase = new Proxy({} as any, {
   get(target, prop) {
     return Reflect.get(currentClient, prop);
@@ -17,9 +34,7 @@ export const supabase = new Proxy({} as any, {
 });
 
 let activeUrl = finalUrl;
-let activeHasKey = !!finalKey && (finalKey as string) !== 'your-supabase-anon-key';
-
-console.log("[Supabase Init] URL configured:", finalUrl, "Has Key:", activeHasKey);
+let activeHasKey = !!supabaseAnonKey && supabaseAnonKey !== 'your-supabase-anon-key';
 
 export const getSupabaseConfigInfo = () => {
   return {
@@ -31,35 +46,7 @@ export const getSupabaseConfigInfo = () => {
 };
 
 export const initializeDynamicSupabase = async () => {
-  try {
-    const res = await fetch("/api/config");
-    if (res.ok) {
-      const data = await res.json();
-      let url = (data.supabaseUrl || '').trim();
-      let key = (data.supabaseAnonKey || '').trim();
-      
-      url = url.replace(/^['"]|['"]$/g, '').trim();
-      key = key.replace(/^['"]|['"]$/g, '').trim();
-
-      const isPlaceholder = url.includes('your-supabase-project') || key === 'your-supabase-anon-key' || !key || !url;
-      const isValid = (url.startsWith('http://') || url.startsWith('https://')) && !isPlaceholder;
-
-      console.log("[Supabase Dynamic Init] Server config diagnostic:", data.diagnostics || "no-diagnostics");
-
-      if (isValid && key) {
-        activeUrl = url;
-        activeHasKey = true;
-        currentClient = createClient(url, key);
-        console.log("[Supabase Dynamic Init] Successfully loaded server-side config!", url);
-        return true;
-      } else {
-        console.log("[Supabase Dynamic Init] Ignored placeholder or empty values from server config. Keeping default instance.");
-      }
-    }
-  } catch (err) {
-    console.error("[Supabase Dynamic Init] Error fetching server-side credentials:", err);
-  }
-  return false;
+  return true;
 };
 
 /**
