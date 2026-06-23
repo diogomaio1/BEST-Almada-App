@@ -41,7 +41,8 @@ export const initializeDynamicSupabase = async () => {
       url = url.replace(/^['"]|['"]$/g, '').trim();
       key = key.replace(/^['"]|['"]$/g, '').trim();
 
-      const isValid = url.startsWith('http://') || url.startsWith('https://');
+      const isPlaceholder = url.includes('your-supabase-project') || key === 'your-supabase-anon-key' || !key || !url;
+      const isValid = (url.startsWith('http://') || url.startsWith('https://')) && !isPlaceholder;
 
       if (isValid && key) {
         activeUrl = url;
@@ -49,6 +50,8 @@ export const initializeDynamicSupabase = async () => {
         currentClient = createClient(url, key);
         console.log("[Supabase Dynamic Init] Successfully loaded server-side config!", url);
         return true;
+      } else {
+        console.log("[Supabase Dynamic Init] Ignored placeholder or empty values from server config. Keeping default instance.");
       }
     }
   } catch (err) {
