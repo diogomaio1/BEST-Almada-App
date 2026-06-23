@@ -1,6 +1,6 @@
 {
-  "name": "BEST Member Platform",
-  "description": "Plataforma interna para membros do BEST: gestão de equipas, gamificação, estrutura organizacional e arquivo histórico interativo.",
+  "name": "BEST Almada Hub",
+  "description": "Plataforma de gestão interna para membros do LBG Almada: gestão de equipas, gamificação, estrutura organizacional e arquivo histórico interativo.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
