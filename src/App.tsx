@@ -2173,6 +2173,10 @@ export default function App() {
                     const hasDots = activeKeyToCheck.includes('.');
                     const isPossiblyInvalidKey = isConfigured && (isStripeOrInvalidKey || !hasDots);
 
+                    if (isConfigured && !isPossiblyInvalidKey) {
+                      return null;
+                    }
+
                     return (
                       <div className="w-full flex flex-col items-center gap-2">
                         <span className={cn(
@@ -2222,7 +2226,7 @@ export default function App() {
                               )}
                             </div>
 
-                            <p className="leading-relaxed text-[11px] text-zinc-600 font-medium">
+                            <div className="leading-relaxed text-[11px] text-zinc-600 font-medium">
                               <strong>Como corrigir:</strong>
                               <ol className="list-decimal pl-4 mt-1 space-y-1">
                                 <li>Acede ao teu dashboard do <strong>Supabase</strong> &gt; <strong>Project Settings</strong> &gt; <strong>API</strong>.</li>
@@ -2235,7 +2239,7 @@ export default function App() {
                                 </li>
                                 <li>Verifica se não há aspas extra ou espaços.</li>
                               </ol>
-                            </p>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -7371,7 +7375,13 @@ export default function App() {
                       }}>
                         <Edit2 className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-red-600" onClick={() => handleAdminDeleteAnnouncement(ann.id)}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-red-600" onClick={() => {
+                        requestConfirmation(
+                          'Eliminar Anúncio',
+                          `Tens a certeza que queres eliminar o anúncio "${ann.title}"?`,
+                          () => handleAdminDeleteAnnouncement(ann.id)
+                        );
+                      }}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>

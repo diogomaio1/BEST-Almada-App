@@ -78,9 +78,9 @@ export default function Layout({
                   <Menu className="h-6 w-6" />
                 </div>
               </SheetTrigger>
-              <SheetContent side="left" className="w-[85%] sm:w-[350px] p-0 border-none">
-                <ScrollArea className="h-full bg-zinc-50">
-                  <div className="p-6 space-y-8">
+              <SheetContent side="left" className="w-[85%] sm:w-[350px] p-0 border-none bg-zinc-50">
+                <ScrollArea className="h-full">
+                  <div className="p-5 sm:p-6 space-y-6 sm:space-y-8">
                     <SheetHeader className="text-left">
                       <SheetTitle className="text-2xl font-black text-red-900">Explorar BEST</SheetTitle>
                       <SheetDescription className="text-zinc-500 font-medium">
@@ -93,7 +93,10 @@ export default function Layout({
                         <section className="space-y-3">
                           <h4 className="text-[10px] font-black text-red-600 uppercase tracking-[0.2em]">Administração</h4>
                           <button 
-                            onClick={() => setActiveTab('admin')}
+                            onClick={() => {
+                              setActiveTab('admin');
+                              setIsSidebarOpen(false);
+                            }}
                             className="w-full flex items-center gap-4 p-4 rounded-2xl bg-red-50 border border-red-100 text-left group transition-all hover:bg-red-100"
                           >
                             <div className="h-10 w-10 rounded-xl bg-red-600 text-white flex items-center justify-center">
@@ -134,12 +137,14 @@ export default function Layout({
                             title="Glossário BEST" 
                             desc="Termos e siglas comuns no BEST."
                             content={glossaryContent}
+                            onClick={() => setIsSidebarOpen(false)}
                           />
                           <MenuSection 
                             icon={HelpCircle} 
                             title="Queres ajuda?" 
                             desc="Encontra membros por competência ou área."
                             content={helpContent}
+                            onClick={() => setIsSidebarOpen(false)}
                             className="bg-red-600 text-white border-none hover:bg-red-700"
                             iconClassName="bg-white/20 text-white"
                             titleClassName="text-white"
@@ -157,30 +162,35 @@ export default function Layout({
                             title="O que é o BEST?" 
                             desc="Missão, visão e propósito da organização."
                             content={renderSidebarPage('about_best', 'O que é o BEST?', Info, 'Missão, visão e propósito da organização.')}
+                            onClick={() => setIsSidebarOpen(false)}
                           />
                           <MenuSection 
                             icon={Users} 
                             title="o LBG" 
                             desc="Estrutura local, contactos e cargos principais."
                             content={renderSidebarPage('lbg_structure', 'o LBG', Users, 'Estrutura local, contactos e cargos principais.')}
+                            onClick={() => setIsSidebarOpen(false)}
                           />
                           <MenuSection 
                             icon={Shield} 
                             title="Órgãos Sociais" 
                             desc="Board, Mesa da Assembleia Geral e Conselho Fiscal."
                             content={renderSidebarPage('social_bodies', 'Órgãos Sociais', Shield, 'Board, Mesa da Assembleia Geral e Conselho Fiscal.')}
+                            onClick={() => setIsSidebarOpen(false)}
                           />
                           <MenuSection 
                             icon={Award} 
                             title="Memberships" 
                             desc="Tipos de membros e o que significam."
                             content={renderSidebarPage('memberships', 'Memberships', Award, 'Tipos de membros e o que significam.')}
+                            onClick={() => setIsSidebarOpen(false)}
                           />
                           <MenuSection 
                             icon={Globe} 
                             title="Oportunidades Internacionais" 
                             desc="Courses, events, trainings e exchanges."
                             content={renderSidebarPage('international_ops', 'Oportunidades Internacionais', Globe, 'Courses, events, trainings e exchanges.')}
+                            onClick={() => setIsSidebarOpen(false)}
                           />
                         </div>
                       </section>
@@ -193,12 +203,14 @@ export default function Layout({
                             title="Guia de Onboarding" 
                             desc="Os teus primeiros passos no BEST."
                             content={renderSidebarPage('onboarding_guide', 'Guia de Onboarding', BookOpen, 'Os teus primeiros passos no BEST.')}
+                            onClick={() => setIsSidebarOpen(false)}
                           />
                           <MenuSection 
                             icon={HelpCircle} 
                             title="FAQ Interna" 
                             desc="Dúvidas frequentes sobre o LBG."
                             content={renderSidebarPage('internal_faq', 'FAQ Interna', HelpCircle, 'Dúvidas frequentes sobre o LBG.')}
+                            onClick={() => setIsSidebarOpen(false)}
                           />
                         </div>
                       </section>
@@ -314,30 +326,30 @@ function MenuSection({
   const Trigger = (
     <button 
       type="button"
-      onClick={content ? undefined : onClick}
+      onClick={onClick}
       className={cn(
-        "w-full flex items-center gap-4 p-4 rounded-2xl bg-white border border-zinc-100 hover:border-red-200 hover:bg-red-50/30 transition-all text-left group cursor-pointer",
+        "w-full flex items-center gap-3 p-3 sm:gap-4 sm:p-4 rounded-2xl bg-white border border-zinc-100 hover:border-red-200 hover:bg-red-50/30 transition-all text-left group cursor-pointer",
         className
       )}
     >
       <div className={cn(
-        "h-10 w-10 rounded-xl bg-zinc-50 text-zinc-400 flex items-center justify-center group-hover:bg-red-100 group-hover:text-red-600 transition-colors",
+        "h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-zinc-50 text-zinc-400 flex items-center justify-center group-hover:bg-red-100 group-hover:text-red-600 transition-colors shrink-0",
         iconClassName
       )}>
-        <Icon className="h-5 w-5" />
+        <Icon className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
       </div>
       <div className="flex-1 min-w-0">
         <h5 className={cn(
-          "text-base font-bold text-zinc-900 truncate group-hover:text-red-700 transition-colors",
+          "text-sm sm:text-base font-bold text-zinc-900 truncate group-hover:text-red-700 transition-colors",
           titleClassName
         )}>{title}</h5>
         <p className={cn(
-          "text-[11px] text-zinc-400 font-semibold truncate group-hover:text-red-600/60 transition-colors",
+          "text-[10px] sm:text-[11px] text-zinc-400 font-semibold truncate group-hover:text-red-600/60 transition-colors",
           descClassName
         )}>{desc}</p>
       </div>
       <ChevronRight className={cn(
-        "h-4 w-4 text-zinc-300 group-hover:text-red-400 group-hover:translate-x-0.5 transition-all",
+        "h-3.5 w-3.5 sm:h-4 sm:w-4 text-zinc-300 group-hover:text-red-400 group-hover:translate-x-0.5 transition-all shrink-0",
         chevronClassName
       )} />
     </button>
