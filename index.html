@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>BEST Almada Hub</title>
+    <link rel="manifest" href="/manifest.json" />
     
     <!-- Metadados de partilha (Open Graph / Facebook) -->
     <meta property="og:title" content="BEST Almada Hub" />
@@ -18,6 +19,11 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js');
+      }
+    </script>
   </body>
 </html>
 

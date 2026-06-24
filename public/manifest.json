@@ -1,0 +1,21 @@
+{
+  "short_name": "BEST Hub",
+  "name": "BEST Almada Hub",
+  "icons": [
+    {
+      "src": "BEST_logo.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "BEST_logo.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#ffffff",
+  "theme_color": "#e30613",
+  "display": "standalone",
+  "orientation": "portrait"
+}

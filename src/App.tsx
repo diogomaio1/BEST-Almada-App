@@ -6453,6 +6453,119 @@ export default function App() {
     );
   };
 
+  const defaultFallbacks: Record<string, string> = {
+    'about_best': `### O que é o BEST? 🌍
+
+O **BEST (Board of European Students of Technology)** é uma organização europeia de estudantes de tecnologia, sem fins lucrativos, apolítica e não governamental. Presente em mais de 90 universidades de 30 países, promovemos a comunicação, cooperação e intercâmbio científico e tecnológico entre estudantes de toda a Europa.
+
+#### A nossa missão 🔴
+Proporcionar educação complementar, apoio à carreira e envolvimento educacional de excelência para todos os estudantes locais e internacionais.
+
+#### Os nossos valores ✨
+*   **Flexibilidade**: Capacidade de adaptação rápida a novas situações e desafios inovadores.
+*   **Amizade**: Criação de relações fortes, cooperação e espírito de família inigualável.
+*   **Melhoria Contínua**: Procura constante da excelência e desenvolvimento pessoal.
+*   **Aprendizagem**: Enriquecimento contínuo através da experiência e partilha de conhecimento.
+*   **Divertimento**: Desfrutar de cada momento de trabalho e colaboração.`,
+
+    'lbg_almada': `### Bem-vindo ao LBG Almada! 🔴✨
+
+O **LBG Almada (Local BEST Group Almada)** é o grupo local da Associação BEST sediado na **FCT NOVA** (Faculdade de Ciências e Tecnologia da Universidade Nova de Lisboa) desde 2011!
+
+#### O que fazemos?
+*   **Cursos de Engenharia e Tecnologia**: Organizamos e enviamos estudantes para os prestigiados *BEST Courses* pela Europa fora.
+*   **Eventos de Carreira**: Estabelecemos pontes sólidas entre estudantes, a universidade e o tecido empresarial nacional e internacional.
+*   **Desenvolvimento de Soft Skills**: Proporcionamos formações em liderança, falar em público, negociação, gestão de equipas, entre outras.
+*   **Espírito e Comunidade**: Fortalecemos o espírito associativo através de atividades inesquecíveis e team buildings!`,
+
+    'memberships': `### Graus de Memberships no LBG Almada 🔴
+
+No LBG Almada, o teu envolvimento e crescimento são acompanhados por diferentes graus de filiação, cada um com os seus direitos, deveres e oportunidades de desenvolvimento:
+
+1.  **Bebé (Baby)**
+    O primeiro contacto com o grupo local! Um novo membro que acabou de entrar no recrutamento e está a aprender sobre o funcionamento do LBG, a conhecer os restantes membros e a habituar-se à dinâmica do BEST Almada.
+
+2.  **Observador (Observer)**
+    Para membros em transição que já demonstram grande interesse e participação ativa. Preparam-se para assumir o compromisso de se tornarem membros efetivos e começam a colaborar mais de perto nas atividades diárias.
+
+3.  **Membro Efetivo (Full Member)**
+    O estatuto principal e mais ativo! Os membros efetivos têm direito de voto nas Assembleias Gerais locais, podem candidatar-se a cargos de liderança (como a Board, Mesa de Assembleia ou Coordenadores) e representam o LBG em eventos locais e internacionais.
+
+4.  **Alumnus**
+    Membros que terminaram o seu percurso académico ou decidiram reduzir o seu papel ativo no grupo local. Continuam a apoiar o LBG Almada com o seu valioso conhecimento, mentoria e apoio intergeracional.`,
+
+    'recognition': `### Reconhecimento e Impacto no BEST 🏆
+
+O impacto de ser membro do BEST Almada vai muito além do trabalho associativo habitual. O esforço e dedicação de cada membro são amplamente valorizados:
+
+*   **Certificação de Competências**: Todas as posições de liderança (Board, Coordenadores, Responsáveis de Departamento) e formações dadas ou recebidas têm direito a certificados oficiais que enriquecem o teu currículo.
+*   **Experiência Prática**: Desenvolve competências cruciais como gestão de projetos, angariação de patrocínios (Fundraising), design, programação, oratória e gestão de conflitos em ambientes reais de alta responsabilidade.
+*   **Networking Europeu**: Liga-te a milhares de estudantes de engenharia de mais de 30 países diferentes e constrói uma rede internacional única de futuros líderes e engenheiros.
+*   **Contactos com Empresas**: Cria ligações diretas com marcas de prestígio que apoiam as nossas atividades e eventos de recrutamento.`,
+
+    'skills_dev': `### Desenvolvimento de Competências (Skills) 🚀
+
+No BEST Almada, acreditamos na aprendizagem pela prática (*learning by doing*). Dependendo dos teus interesses e dos departamentos em que participas, poderás desenvolver competências de excelência nas seguintes áreas:
+
+*   **Liderança & Gestão de Projetos**: Organização de eventos locais e internacionais, coordenação de equipas de trabalho e otimização de recursos.
+*   **Comunicação & Vendas (Fundraising)**: Negociação e reuniões profissionais com empresas parceiras, técnicas de persuasão e elaboração de contratos comerciais.
+*   **Marketing & Relações Públicas (PR)**: Gestão de redes sociais, criação de campanhas de marketing inovadoras, branding pessoal e institucional.
+*   **Criatividade & Design**: Utilização de ferramentas profissionais de design gráfico, desenvolvimento de identidades visuais de eventos e material de merchandising.
+*   **Tecnologia & Programação (IT)**: Desenvolvimento e manutenção de plataformas web (como este Hub!), administração de sistemas e gestão de infraestruturas digitais.
+*   **Trabalho de Equipa & Adaptabilidade**: Experiência de colaboração num ambiente dinâmico, multicultural e focado no crescimento mútuo.`,
+
+    'international': `### Oportunidades Internacionais pelo BEST 🌍✈️
+
+Como parte da rede europeia do BEST, os membros do LBG Almada e estudantes da FCT NOVA têm acesso a uma vasta gama de oportunidades incríveis em mais de 30 países da Europa:
+
+#### 1. BEST Courses
+Cursos de 1 a 2 semanas focados em tópicos tecnológicos de ponta (Inteligência Artificial, Energias Renováveis, Aeroespacial, etc.), organizados por universidades de prestígio por toda a Europa. 
+*   **Baixo Custo**: Apenas pagas a viagem até lá! O alojamento, 3 refeições por dia e todas as atividades sociais e culturais estão incluídos na taxa de participação que é mínima (ou muitas vezes totalmente gratuita para membros do BEST).
+
+#### 2. Eventos de Educação (Events on Education)
+Fóruns e debates onde estudantes discutem e moldam o futuro do ensino superior de engenharia na Europa, colaborando de perto com professores, reitores e especialistas de topo.
+
+#### 3. Encontros Culturais (Exchanges)
+Intercâmbios com outros Local BEST Groups (LBG's) em que viajas para conhecer novas culturas, cidades e fazer amizades europeias inesquecíveis em fins de semana repletos de atividades.
+
+#### 4. BEST Training Event
+Eventos inteiramente dedicados ao desenvolvimento de soft skills, com formadores certificados que te dão ferramentas essenciais para brilhares profissionalmente.`,
+
+    'onboarding': `### Guia de Onboarding para Novos Membros 🚀🔴
+
+Bem-vindo ao LBG Almada! Estamos super entusiasmados por te ter connosco. Os teus primeiros dias vão ser repletos de descobertas e aprendizagens. Aqui tens o roteiro básico para dares os teus primeiros passos de forma bem-sucedida:
+
+#### Passo 1: O teu Padrinho/Madrinha 👥
+No LBG Almada tens o nosso programa de mentoria! Será atribuído um padrinho ou madrinha que te acompanhará no teu percurso inicial, apresentará o grupo, tirará as tuas dúvidas e garantirá que te integras facilmente.
+
+#### Passo 2: Explora os Departamentos 🔍
+Fala com os responsáveis (VPs) de cada departamento (FR, HR, PR, IT, Design) e assiste às suas reuniões gerais. Descobre as tarefas que mais te entusiasmam e desafia-te a experimentar novas áreas de interesse.
+
+#### Passo 3: Cria a tua Conta e Acessos 🌐
+*   Solicita os teus acessos para o Slack/Discord institucional.
+*   Cria a tua conta no Portal Internacional do BEST (best.eu.org) utilizando o teu e-mail institucional.
+*   Garante que tens acesso às ferramentas locais do LBG Almada no Google Drive.
+
+#### Passo 4: Participa nas Reuniões Locais 🔴
+As reuniões gerais e Assembleias Gerais são o coração do LBG Almada. Participa ativamente, partilha as tuas ideias e acompanha as decisões importantes do grupo!`,
+
+    'internal_faq': `### FAQ Interna - Perguntas Frequentes ❓🔴
+
+Eis as respostas às dúvidas mais comuns dos membros e novos recrutas do LBG Almada:
+
+#### Como me posso voluntariar para ajudar a organizar um evento local?
+Deves falar diretamente com o respetivo Coordenador do Evento (Main Organizer) ou com a Board nas reuniões gerais. Todos os eventos precisam de ajuda em diversas frentes (FR, PR, Logística, etc.).
+
+#### Quanto tempo tenho de dedicar ao LBG Almada por semana?
+Não há uma regra fixa! Cada membro gere o seu tempo e escolhe o seu nível de dedicação de acordo com a sua disponibilidade académica e pessoal. Recomendamos que tentes manter-te informado e que participes nas reuniões sempre que possas.
+
+#### Como posso propor uma nova ideia ou projeto?
+Podes apresentar qualquer proposta numa reunião geral do LBG Almada ou falar previamente com o respetivo membro da Board que apoiará o desenvolvimento e estruturação da tua ideia.
+
+#### Quem me pode certificar uma formação ou cargo desempenhado?
+A Board do LBG Almada passa certificados formais de cargos, coordenações de projetos ou participações em eventos locais. Basta falares com o Secretário ou a Presidente para que seja emitido.`
+  };
+
   const SidebarPage = ({ 
     id, 
     title, 
@@ -6466,9 +6579,16 @@ export default function App() {
     description: string, 
     isAdmin: boolean 
   }) => {
-    const content = appContent[id] || { text: 'A carregar conteúdo...', title: title };
+    const defaultText = defaultFallbacks[id] || 'A carregar conteúdo...';
+    const content = appContent[id] || { text: defaultText, title: title };
     const [isEditing, setIsEditing] = React.useState(false);
     const [editValue, setEditValue] = React.useState(content.text);
+
+    React.useEffect(() => {
+      if (!isEditing) {
+        setEditValue(content.text);
+      }
+    }, [content.text, isEditing]);
 
     const handleSave = async () => {
       try {
@@ -6564,15 +6684,13 @@ export default function App() {
     const sidebarPages: Record<string, { title: string, icon: any, desc: string }> = {
       'about_best': { title: 'Sobre o BEST', icon: Info, desc: 'A maior rede de estudantes de tecnologia da Europa.' },
       'lbg_almada': { title: 'o LBG Almada', icon: MapPin, desc: 'O teu grupo local na FCT NOVA.' },
-      'social_bodies': { title: 'Orgãos Sociais', icon: Shield, desc: 'A equipa que gere o LBG Almada.' },
+      'social_bodies': { title: 'Órgãos Sociais', icon: Shield, desc: 'A equipa que gere o LBG Almada.' },
       'memberships': { title: 'Memberships', icon: Award, desc: 'Os diferentes níveis de envolvimento.' },
-      'gamification': { title: 'Gamificação', icon: Zap, desc: 'Regras e prémios do sistema de pontos.' },
       'recognition': { title: 'Reconhecimento', icon: Trophy, desc: 'O impacto de ser membro do BEST.' },
       'skills_dev': { title: 'Desenvolvimento', icon: Target, desc: 'As competências que podes adquirir.' },
-      'international': { title: 'Internacional', icon: Globe, desc: 'Oportunidades em toda a Europa.' },
-      'calendar_guide': { title: 'Calendário Hub', icon: Calendar, desc: 'Acompanha todas as datas importantes.' },
-      'onboarding': { title: 'Onboarding', icon: Rocket, desc: 'Guia para os teus primeiros dias.' },
-      'internal_faq': { title: 'FAQ Interna', icon: HelpCircle, desc: 'Respostas às dúvidas mais comuns.' }
+      'international': { title: 'Oportunidades Internacionais', icon: Globe, desc: 'Courses, events, trainings e exchanges pela Europa.' },
+      'onboarding': { title: 'Guia de Onboarding', icon: Rocket, desc: 'Os teus primeiros passos no BEST.' },
+      'internal_faq': { title: 'FAQ Interna', icon: HelpCircle, desc: 'Dúvidas frequentes sobre o LBG.' }
     };
 
     if (sidebarPages[activeTab]) {

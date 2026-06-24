@@ -172,11 +172,17 @@ export default function Layout({
                               content={glossaryContent}
                             />
                             <MenuSection 
-                              icon={HelpCircle} 
-                              title="Queres ajuda?" 
+                              icon={Search} 
+                              title="Membros & Competências" 
                               desc="Encontra membros por competência ou área."
                               content={helpContent}
-                              className="bg-red-600 text-white border-none hover:bg-red-700 col-span-2"
+                            />
+                            <MenuSection 
+                              icon={MessageSquare} 
+                              title="Chatbot do BEST" 
+                              desc="Tira dúvidas sobre o BEST em tempo real."
+                              content={<ChatbotDialogContent />}
+                              className="bg-red-600 text-white border-none hover:bg-red-700 col-span-2 shadow-sm"
                               iconClassName="bg-white/20 text-white"
                               titleClassName="text-white"
                               descClassName="text-white/70"
@@ -229,9 +235,9 @@ export default function Layout({
                             />
                             <MenuSection 
                               icon={Users} 
-                              title="o LBG" 
-                              desc="Estrutura local, contactos e cargos principais."
-                              content={renderSidebarPage('lbg_structure', 'o LBG', Users, 'Estrutura local, contactos e cargos principais.')}
+                              title="o LBG Almada" 
+                              desc="O teu grupo local na FCT NOVA."
+                              content={renderSidebarPage('lbg_almada', 'o LBG Almada', Users, 'O teu grupo local na FCT NOVA.')}
                             />
                             <MenuSection 
                               icon={Shield} 
@@ -246,10 +252,22 @@ export default function Layout({
                               content={renderSidebarPage('memberships', 'Memberships', Award, 'Tipos de membros e o que significam.')}
                             />
                             <MenuSection 
+                              icon={Trophy} 
+                              title="Reconhecimento" 
+                              desc="O impacto de ser membro do BEST."
+                              content={renderSidebarPage('recognition', 'Reconhecimento', Trophy, 'O impacto de ser membro do BEST.')}
+                            />
+                            <MenuSection 
+                              icon={Target} 
+                              title="Desenvolvimento" 
+                              desc="As competências que podes adquirir."
+                              content={renderSidebarPage('skills_dev', 'Desenvolvimento', Target, 'As competências que podes adquirir.')}
+                            />
+                            <MenuSection 
                               icon={Globe} 
                               title="Oportunidades Internacionais" 
-                              desc="Courses, events, trainings e exchanges."
-                              content={renderSidebarPage('international_ops', 'Oportunidades Internacionais', Globe, 'Courses, events, trainings e exchanges.')}
+                              desc="Courses, events, trainings e exchanges pela Europa."
+                              content={renderSidebarPage('international', 'Oportunidades Internacionais', Globe, 'Courses, events, trainings e exchanges.')}
                               className="col-span-2"
                             />
                           </div>
@@ -295,7 +313,7 @@ export default function Layout({
                               icon={BookOpen} 
                               title="Guia de Onboarding" 
                               desc="Os teus primeiros passos no BEST."
-                              content={renderSidebarPage('onboarding_guide', 'Guia de Onboarding', BookOpen, 'Os teus primeiros passos no BEST.')}
+                              content={renderSidebarPage('onboarding', 'Guia de Onboarding', BookOpen, 'Os teus primeiros passos no BEST.')}
                             />
                             <MenuSection 
                               icon={HelpCircle} 
@@ -308,8 +326,9 @@ export default function Layout({
                       </section>
                     </div>
 
-                    <div className="pt-4 pb-8">
-                      <p className="text-[10px] text-zinc-400 text-center font-medium">BEST Almada Hub v1.0</p>
+                    <div className="pt-4 pb-8 text-center">
+                      <p className="text-[10px] text-zinc-400 font-medium">BEST Almada Hub v1.0</p>
+                      <p className="text-[8px] text-zinc-400/80 mt-1 font-bold tracking-wider uppercase">Created by: Diogo Maio</p>
                     </div>
                   </div>
                 </ScrollArea>
@@ -486,4 +505,38 @@ function MenuSection({
 
 function FaqInfo() {
   return null;
+}
+
+function ChatbotDialogContent() {
+  return (
+    <div className="flex flex-col items-center justify-center text-center p-8 bg-zinc-50/50 rounded-3xl border border-zinc-100/80 min-h-[350px] space-y-6">
+      <div className="h-16 w-16 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center shadow-inner">
+        <MessageSquare className="h-8 w-8 animate-pulse" />
+      </div>
+      
+      <div className="space-y-2 max-w-sm">
+        <h3 className="text-lg font-black text-red-950 uppercase tracking-tight">O BESTie está a Caminho! 🤖✨</h3>
+        <p className="text-xs text-zinc-500 font-medium leading-relaxed">
+          Para te oferecer a melhor experiência, o assistente inteligente está a ser configurado para se ligar diretamente à nossa base de dados do **BEST Almada Hub**.
+        </p>
+        <p className="text-xs text-zinc-400 font-medium leading-relaxed">
+          Brevemente, o **BESTie** será capaz de responder a dúvidas em tempo real sobre membros, competências, eventos e onboarding com total precisão!
+        </p>
+      </div>
+
+      <div className="w-full max-w-xs pt-2">
+        <a 
+          href="https://best-almada.org/chatbot" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="flex items-center justify-center gap-2.5 w-full bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-3.5 px-6 rounded-2xl shadow-md shadow-red-100 transition-all hover:scale-[1.02] cursor-pointer"
+        >
+          Aceder ao Chatbot do BEST ↗
+        </a>
+        <p className="text-[9px] text-zinc-400 mt-2 font-medium">
+          Dica: Podes editar este link em <code className="bg-zinc-100 px-1 py-0.5 rounded font-mono text-[8px]">src/components/Layout.tsx</code>
+        </p>
+      </div>
+    </div>
+  );
 }
