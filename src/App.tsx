@@ -478,6 +478,9 @@ export default function App() {
   const [isManagingTasks, setIsManagingTasks] = React.useState(false);
   const [isManagingMetas, setIsManagingMetas] = React.useState(false);
   const [isManagingAnnouncements, setIsManagingAnnouncements] = React.useState(false);
+  const [isManagingGlobalSkills, setIsManagingGlobalSkills] = React.useState(false);
+  const [newSkillName, setNewSkillName] = React.useState('');
+  const [customSkill, setCustomSkill] = React.useState('');
   const [selectedAnnouncementDetails, setSelectedAnnouncementDetails] = React.useState<Announcement | null>(null);
   const [isManagingGlossary, setIsManagingGlossary] = React.useState(false);
   const [selectedHistoryYear, setSelectedHistoryYear] = React.useState(() => {
@@ -574,6 +577,12 @@ export default function App() {
   const addGlobalSkill = async (skill: string) => {
     if (!skill || dynamicSkills.includes(skill)) return;
     const newList = [...dynamicSkills, skill];
+    await setDoc(doc(db, 'appContent', 'skills'), { list: newList });
+  };
+
+  const removeGlobalSkill = async (skill: string) => {
+    if (!skill) return;
+    const newList = dynamicSkills.filter(s => s !== skill);
     await setDoc(doc(db, 'appContent', 'skills'), { list: newList });
   };
   const [publicProfileId] = React.useState<string | null>(() => {
@@ -712,10 +721,12 @@ export default function App() {
   const [searchFilter, setSearchFilter] = React.useState<'skill' | 'team' | 'role' | 'event'>('skill');
   const [viewingProfile, setViewingProfile] = React.useState<UserProfile | null>(null);
   const [viewingCall, setViewingCall] = React.useState<Role | null>(null);
+  const [viewingPreviousRole, setViewingPreviousRole] = React.useState<any | null>(null);
   const [viewingMemberActivity, setViewingMemberActivity] = React.useState<UserProfile | null>(null);
   const [selectedTeamView, setSelectedTeamView] = React.useState<Team | null>(null);
   const [selectedFamilyView, setSelectedFamilyView] = React.useState<Family | null>(null);
   const [eventViewMode, setEventViewMode] = React.useState<'list' | 'calendar'>('calendar');
+  const [eventSubTab, setEventSubTab] = React.useState<'upcoming' | 'past'>('upcoming');
   const [eventCurrentMonth, setEventCurrentMonth] = React.useState(new Date());
 
   // Test connection to Firestore
@@ -1152,12 +1163,12 @@ export default function App() {
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Check if Supabase keys are configured properly
+    // Check if keys are configured properly
     const config = getSupabaseConfigInfo();
 
     if (config.isPlaceholder || !config.hasKey) {
       toast.error(
-        '⚠️ Configuração do Supabase Pendente: Por favor, adiciona as variáveis de ambiente VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no menu de Secrets do AI Studio.',
+        '⚠️ Configuração de Autenticação Pendente: Por favor, garante que as variáveis de ambiente de autenticação estão ativas.',
         { duration: 8000 }
       );
       return;
@@ -1199,14 +1210,14 @@ export default function App() {
       const errorMessage = error?.message || String(error);
       if (errorMessage.includes('Failed to fetch') || errorMessage.includes('fetch')) {
         toast.error(
-          `❌ Erro de Ligação: O teu browser não consegue contactar o Supabase no endereço "${config.url}". Garante que o URL está correto (sem espaços ou aspas) nos Secrets do AI Studio e que o teu projeto Supabase está ativo.`,
+          `❌ Erro de Ligação: Não foi possível estabelecer ligação com o servidor de autenticação. Por favor, garante que a tua ligação à Internet está estável ou tenta novamente mais tarde.`,
           { duration: 15000 }
         );
       } else if (errorMessage.toLowerCase().includes('invalid login credentials')) {
         toast.error('❌ Credenciais de login inválidas. Se é a tua primeira vez no Hub, clica em "Regista-te" abaixo para criares a tua conta.');
       } else if (errorMessage.toLowerCase().includes('email not confirmed')) {
         toast.error(
-          '❌ E-mail não verificado! Precisas de confirmar o teu e-mail antes de entrar. Verifica a tua caixa de entrada (ou pasta Spam) para encontrar o link enviado pelo Supabase. \n\n💡 Dica: No teu painel do Supabase, podes desativar isto em Authentication > Providers > Email e desativar "Confirm email".',
+          '❌ E-mail não verificado! Precisas de confirmar o teu e-mail antes de entrar. Verifica a tua caixa de entrada (ou pasta Spam) para encontrar o link enviado.',
           { duration: 12000 }
         );
       } else {
@@ -1371,18 +1382,26 @@ export default function App() {
     }
   };
   const handleAddSkill = async () => {
-    if (!user || !newSkill.trim()) return;
-    if (user.skills.includes(newSkill.trim())) {
+    if (!user) return;
+    const skillToAdd = newSkill.trim() || customSkill.trim();
+    if (!skillToAdd) return;
+    
+    if (user.skills.includes(skillToAdd)) {
       toast.error('Esta skill já existe!');
       return;
     }
     
     try {
-      const updatedSkills = [...user.skills, newSkill.trim()];
+      if (customSkill.trim()) {
+        await addGlobalSkill(skillToAdd);
+      }
+      
+      const updatedSkills = [...user.skills, skillToAdd];
       await updateDoc(doc(db, 'users', user.uid), {
         skills: updatedSkills
       });
       setNewSkill('');
+      setCustomSkill('');
       setIsAddingSkill(false);
       toast.success('Skill adicionada com sucesso!');
     } catch (error) {
@@ -1416,7 +1435,8 @@ export default function App() {
         photoURL: editForm.photoURL || user.photoURL,
         privateAreaLink: editForm.privateAreaLink || '',
         course: editForm.course || '',
-        interests: editForm.interests || []
+        interests: editForm.interests || [],
+        previousRoles: editForm.previousRoles || []
       };
       
       if (user?.role === 'admin') {
@@ -1690,6 +1710,16 @@ export default function App() {
     }
   };
 
+  const isEventPast = (ev: any) => {
+    if (ev.isHistorical) return true;
+    if (!ev.startDate) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const eventDate = new Date(ev.endDate || ev.startDate);
+    eventDate.setHours(0, 0, 0, 0);
+    return eventDate < today;
+  };
+
   const handleAdminUpdateEvent = async () => {
     setLoading(true);
     try {
@@ -1810,35 +1840,51 @@ export default function App() {
 
   const handleApplyToTask = async (task: Task) => {
     if (!user) return;
-    try {
-      if (task.coordinatorId) {
-        await createNotification({
-          userId: task.coordinatorId,
-          title: 'Nova candidatura a tarefa',
-          message: `${user.displayName} candidatou-se a uma das tuas tarefas: ${task.title}. Dá-lhe feedback!`,
-          type: 'task',
-          resourceId: task.id
-        });
-      }
+    const coordName = allMembers.find(m => m.uid === task.coordinatorId)?.displayName || 'Coordenador';
+    
+    requestConfirmation(
+      'Confirmar Candidatura',
+      `Tens a certeza de que te queres candidatar à tarefa "${task.title}"? O coordenador (${coordName}) será notificado.`,
+      async () => {
+        try {
+          const recipientIds = new Set<string>();
 
-      const admins = allMembers.filter(m => m.role === 'admin');
-      for (const admin of admins) {
-        if (admin.uid !== task.coordinatorId) {
-          await createNotification({
-            userId: admin.uid,
-            title: 'Nova candidatura a tarefa',
-            message: `${user.displayName} candidatou-se à tarefa: ${task.title}.`,
-            type: 'task',
-            resourceId: task.id
-          });
+          if (task.coordinatorId && task.coordinatorId !== user.uid) {
+            recipientIds.add(task.coordinatorId);
+            await createNotification({
+              userId: task.coordinatorId,
+              title: 'Nova candidatura a tarefa',
+              message: `${user.displayName} candidatou-se a uma das tuas tarefas: ${task.title}. Dá-lhe feedback!`,
+              type: 'task',
+              resourceId: task.id
+            });
+          }
+
+          if (recipientIds.size === 0) {
+            const admins = allMembers.filter(m => m.role === 'admin');
+            for (const admin of admins) {
+              if (admin.uid !== user.uid) {
+                await createNotification({
+                  userId: admin.uid,
+                  title: 'Nova candidatura a tarefa',
+                  message: `${user.displayName} candidatou-se à tarefa: ${task.title}.`,
+                  type: 'task',
+                  resourceId: task.id
+                });
+              }
+            }
+          }
+
+          toast.success('Candidatura enviada com sucesso! O coordenador da tarefa foi notificado. 🚀');
+        } catch (error) {
+          console.error("Error applying to task:", error);
+          toast.error('Ocorreu um erro ao enviar a candidatura.');
         }
-      }
-
-      toast.success('Candidatura enviada com sucesso! 🚀');
-    } catch (error) {
-      console.error("Error applying to task:", error);
-      toast.error('Ocorreu um erro ao enviar a candidatura.');
-    }
+      },
+      'Candidatar-me',
+      'Cancelar',
+      false
+    );
   };
 
   const handleTaskStatus = async (taskId: string, currentStatus: string) => {
@@ -1995,15 +2041,40 @@ export default function App() {
               <div className="space-y-4">
                 <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] border-l-2 border-red-600 pl-3">Cargos Antigos</h3>
                 <div className="space-y-2">
-                  {memberPreviousRoles.length > 0 ? memberPreviousRoles.map((role, idx) => (
-                    <div key={idx} className="flex items-center gap-3 p-4 bg-white border border-zinc-100 rounded-2xl shadow-sm">
-                      <div className="h-8 w-8 rounded-lg bg-zinc-50 flex items-center justify-center text-zinc-400">
-                        <HistoryIcon className="h-4 w-4" />
+                  {memberPreviousRoles.length > 0 ? memberPreviousRoles.map((role, idx) => {
+                    const isObj = typeof role === 'object' && role !== null;
+                    const rTitle = isObj ? (role as any).title : String(role);
+                    const rTeamId = isObj ? (role as any).teamId : '';
+                    const rEventId = isObj ? (role as any).eventId : '';
+                    const rTeamName = rTeamId ? teams.find(t => t.id === rTeamId)?.name : '';
+                    const rEventName = rEventId ? events.find(e => e.id === rEventId)?.title : '';
+
+                    return (
+                      <div 
+                        key={idx} 
+                        className="flex items-center justify-between gap-3 p-4 bg-white border border-zinc-100 rounded-2xl shadow-sm hover:shadow-md hover:border-red-100 transition-all cursor-pointer group"
+                        onClick={() => setViewingPreviousRole(role)}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="h-8 w-8 rounded-lg bg-zinc-50 flex items-center justify-center text-zinc-400 group-hover:text-red-600 transition-colors shrink-0">
+                            <HistoryIcon className="h-4 w-4" />
+                          </div>
+                          <div className="space-y-0.5 min-w-0 text-left">
+                            <p className="text-xs font-bold text-zinc-900 group-hover:text-red-600 transition-colors truncate">{rTitle}</p>
+                            {(rTeamName || rEventName) && (
+                              <p className="text-[9px] text-zinc-400 font-medium truncate">
+                                {rTeamName && `Equipa: ${rTeamName}`}
+                                {rTeamName && rEventName && ' • '}
+                                {rEventName && `Evento: ${rEventName}`}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-zinc-400 group-hover:text-red-600 group-hover:translate-x-0.5 transition-all shrink-0" />
                       </div>
-                      <p className="text-xs font-bold text-zinc-900">{role}</p>
-                    </div>
-                  )) : (
-                    <p className="text-[10px] text-zinc-400 italic bg-zinc-50 p-4 rounded-2xl border border-dashed border-zinc-100">Não existem cargos anteriores registados.</p>
+                    );
+                  }) : (
+                    <p className="text-[10px] text-zinc-400 italic bg-zinc-50 p-4 rounded-2xl border border-dashed border-zinc-100 text-left">Não existem cargos anteriores registados.</p>
                   )}
                 </div>
               </div>
@@ -2531,17 +2602,40 @@ export default function App() {
             <div className="space-y-4">
               <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] border-l-2 border-red-600 pl-3">Cargos Antigos</h3>
               <div className="space-y-2">
-                {(user.previousRoles || []).length > 0 ? (user.previousRoles || []).map((role: string, idx: number) => (
-                  <div key={idx} className="flex items-center gap-3 p-4 bg-white border border-zinc-100 rounded-2xl shadow-sm">
-                    <div className="h-8 w-8 rounded-lg bg-zinc-50 flex items-center justify-center text-zinc-400">
-                      <HistoryIcon className="h-4 w-4" />
+                {(user.previousRoles || []).length > 0 ? (user.previousRoles || []).map((role: any, idx: number) => {
+                  const isObj = typeof role === 'object' && role !== null;
+                  const rTitle = isObj ? role.title : String(role);
+                  const rTeamId = isObj ? role.teamId : '';
+                  const rEventId = isObj ? role.eventId : '';
+                  const rTeamName = rTeamId ? teams.find(t => t.id === rTeamId)?.name : '';
+                  const rEventName = rEventId ? events.find(e => e.id === rEventId)?.title : '';
+
+                  return (
+                    <div 
+                      key={idx} 
+                      className="flex items-center justify-between gap-3 p-4 bg-white border border-zinc-100 rounded-2xl shadow-sm hover:shadow-md hover:border-red-100 transition-all cursor-pointer group"
+                      onClick={() => setViewingPreviousRole(role)}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-8 w-8 rounded-lg bg-zinc-50 flex items-center justify-center text-zinc-400 group-hover:text-red-600 transition-colors shrink-0">
+                          <HistoryIcon className="h-4 w-4" />
+                        </div>
+                        <div className="space-y-0.5 min-w-0 text-left">
+                          <p className="text-xs font-bold text-zinc-900 group-hover:text-red-600 transition-colors truncate">{rTitle}</p>
+                          {(rTeamName || rEventName) && (
+                            <p className="text-[9px] text-zinc-400 font-medium truncate">
+                              {rTeamName && `Equipa: ${rTeamName}`}
+                              {rTeamName && rEventName && ' • '}
+                              {rEventName && `Evento: ${rEventName}`}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-zinc-400 group-hover:text-red-600 group-hover:translate-x-0.5 transition-all shrink-0" />
                     </div>
-                    <div className="flex-1">
-                      <p className="text-xs font-bold text-zinc-900">{role}</p>
-                    </div>
-                  </div>
-                )) : (
-                  <p className="text-[10px] font-medium text-zinc-400 italic">Nenhum cargo anterior registado.</p>
+                  );
+                }) : (
+                  <p className="text-[10px] font-medium text-zinc-400 italic text-left">Nenhum cargo anterior registado.</p>
                 )}
               </div>
             </div>
@@ -2558,7 +2652,7 @@ export default function App() {
             <div className="p-2 rounded-lg bg-red-600 text-white">
               <Star className="h-4 w-4 fill-current" />
             </div>
-            <h3 className="font-bold text-zinc-900">Especialização</h3>
+            <h3 className="font-bold text-zinc-900">Skills</h3>
           </div>
           <div className="flex flex-wrap gap-2">
             {user.skills.length > 0 ? user.skills.map((skill) => (
@@ -2574,7 +2668,7 @@ export default function App() {
                 )}
               </Badge>
             )) : (
-              <p className="text-xs text-zinc-400 italic">Nenhuma especialização adicionada.</p>
+              <p className="text-xs text-zinc-400 italic">Nenhuma skill adicionada.</p>
             )}
             
             {(user.role === 'admin' || user.role === 'management') && (
@@ -2586,28 +2680,46 @@ export default function App() {
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto rounded-[2rem]">
                   <DialogHeader>
-                    <DialogTitle>Adicionar Especialização</DialogTitle>
+                    <DialogTitle>Adicionar Skill</DialogTitle>
                     <DialogDescription>
-                      Adiciona uma nova competência ao perfil.
+                      Escolhe uma skill existente ou cria uma nova para adicionares ao teu perfil.
                     </DialogDescription>
                   </DialogHeader>
                   <div className="grid gap-4 py-4">
-                    <div className="grid gap-2">
-                      <Label>Competência</Label>
-                      <Select value={newSkill} onValueChange={setNewSkill}>
-                        <SelectTrigger className="rounded-xl border-zinc-200">
-                          <SelectValue placeholder="Escolher competência" />
-                        </SelectTrigger>
-                        <SelectContent className="rounded-xl">
-                          {PREDEFINED_SKILLS.filter(s => !user.skills.includes(s)).map(s => (
-                            <SelectItem key={s} value={s}>{s}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                    <div className="grid gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-zinc-500 text-[10px] uppercase font-black tracking-widest">Escolher Skill Existente</Label>
+                        <Select value={newSkill} onValueChange={(v) => {
+                          setNewSkill(v);
+                          setCustomSkill('');
+                        }}>
+                          <SelectTrigger className="rounded-xl border-zinc-200">
+                            <SelectValue placeholder="Escolher uma skill" />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-xl">
+                            {dynamicSkills.filter(s => !user.skills.includes(s)).map(s => (
+                              <SelectItem key={s} value={s}>{s}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="text-center text-zinc-400 font-bold text-xs">— OU —</div>
+                      <div className="space-y-2">
+                        <Label className="text-zinc-500 text-[10px] uppercase font-black tracking-widest">Criar e Adicionar Nova Skill</Label>
+                        <Input 
+                          className="rounded-xl border-zinc-200" 
+                          placeholder="Escreve uma nova skill..." 
+                          value={customSkill} 
+                          onChange={(e) => {
+                            setCustomSkill(e.target.value);
+                            setNewSkill('');
+                          }} 
+                        />
+                      </div>
                     </div>
                   </div>
                   <DialogFooter>
-                    <Button onClick={handleAddSkill} disabled={!newSkill} className="bg-red-600 hover:bg-red-700">Adicionar</Button>
+                    <Button onClick={handleAddSkill} disabled={!newSkill && !customSkill} className="bg-red-600 hover:bg-red-700">Adicionar</Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
@@ -2849,9 +2961,21 @@ export default function App() {
 
     return (
       <div className="space-y-6">
-        <div className="space-y-2">
-          <h2 className="text-2xl font-black text-red-900 uppercase tracking-tight">Equipas o LBG</h2>
-          <p className="text-sm text-zinc-500 font-medium">Conhece a estrutura e os membros de o LBG.</p>
+        <div className="flex items-center justify-between">
+          <div className="space-y-1 text-left">
+            <h2 className="text-2xl font-black text-red-900 uppercase tracking-tight">Equipas do LBG</h2>
+            <p className="text-sm text-zinc-500 font-medium">Conhece a estrutura e os membros do LBG.</p>
+          </div>
+          {user?.role === 'admin' && (
+            <Button 
+              variant="outline" 
+              size="sm"
+              className="h-10 rounded-xl font-bold text-xs bg-white border-zinc-200 hover:bg-zinc-50 text-zinc-700 flex items-center gap-1.5 shadow-sm"
+              onClick={() => setIsManagingTeams(true)}
+            >
+              <Settings className="h-4 w-4 text-zinc-500" /> Gerir Equipas
+            </Button>
+          )}
         </div>
 
         <Tabs defaultValue="annual" className="w-full">
@@ -2967,9 +3091,21 @@ export default function App() {
 
     return (
       <div className="space-y-6">
-        <div className="space-y-2">
-          <h2 className="text-2xl font-bold">Calls</h2>
-          <p className="text-sm text-zinc-500">Encontra o teu próximo desafio no BEST.</p>
+        <div className="flex items-center justify-between">
+          <div className="space-y-1 text-left">
+            <h2 className="text-2xl font-bold">Calls</h2>
+            <p className="text-sm text-zinc-500">Encontra o teu próximo desafio no BEST.</p>
+          </div>
+          {user?.role === 'admin' && (
+            <Button 
+              variant="outline" 
+              size="sm"
+              className="h-10 rounded-xl font-bold text-xs bg-white border-zinc-200 hover:bg-zinc-50 text-zinc-700 flex items-center gap-1.5 shadow-sm"
+              onClick={() => setIsManagingCalls(true)}
+            >
+              <Settings className="h-4 w-4 text-zinc-500" /> Gerir Calls
+            </Button>
+          )}
         </div>
 
         <Tabs defaultValue="local" className="w-full">
@@ -3025,6 +3161,262 @@ export default function App() {
             </TabsContent>
           )}
         </Tabs>
+      </div>
+    );
+  };
+
+  const PreviousRolesManager = ({ 
+    previousRoles = [], 
+    onChange, 
+    teams, 
+    events, 
+    dynamicSkills 
+  }: { 
+    previousRoles: any[], 
+    onChange: (roles: any[]) => void, 
+    teams: Team[], 
+    events: BESTEvent[], 
+    dynamicSkills: string[] 
+  }) => {
+    const [isAdding, setIsAdding] = React.useState(false);
+    const [editingIdx, setEditingIdx] = React.useState<number | null>(null);
+    
+    const [title, setTitle] = React.useState('');
+    const [description, setDescription] = React.useState('');
+    const [teamId, setTeamId] = React.useState('');
+    const [eventId, setEventId] = React.useState('');
+    const [selectedSkills, setSelectedSkills] = React.useState<string[]>([]);
+
+    const handleStartAdd = () => {
+      setTitle('');
+      setDescription('');
+      setTeamId('none_team');
+      setEventId('none_event');
+      setSelectedSkills([]);
+      setEditingIdx(null);
+      setIsAdding(true);
+    };
+
+    const handleStartEdit = (idx: number) => {
+      const role = previousRoles[idx];
+      const isObj = typeof role === 'object' && role !== null;
+      setTitle(isObj ? role.title : role);
+      setDescription(isObj ? (role.description || '') : '');
+      setTeamId(isObj ? (role.teamId || 'none_team') : 'none_team');
+      setEventId(isObj ? (role.eventId || 'none_event') : 'none_event');
+      setSelectedSkills(isObj ? (role.skills || []) : []);
+      setEditingIdx(idx);
+      setIsAdding(true);
+    };
+
+    const handleSave = () => {
+      if (!title.trim()) {
+        toast.error('O nome do cargo é obrigatório.');
+        return;
+      }
+      const newRoleObj = {
+        title: title.trim(),
+        description: description.trim(),
+        teamId: teamId === 'none_team' ? '' : teamId,
+        eventId: eventId === 'none_event' ? '' : eventId,
+        skills: selectedSkills
+      };
+
+      let updated = [...previousRoles];
+      if (editingIdx !== null) {
+        updated[editingIdx] = newRoleObj;
+      } else {
+        updated.push(newRoleObj);
+      }
+      onChange(updated);
+      setIsAdding(false);
+      setEditingIdx(null);
+    };
+
+    const handleDelete = (idx: number) => {
+      const updated = previousRoles.filter((_, i) => i !== idx);
+      onChange(updated);
+    };
+
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Cargos Antigos</Label>
+          {!isAdding && (
+            <Button 
+              type="button" 
+              variant="ghost" 
+              size="sm" 
+              className="h-7 text-[9px] font-black uppercase text-red-600 hover:bg-red-50 rounded-lg px-2 flex items-center gap-1"
+              onClick={handleStartAdd}
+            >
+              <Plus className="h-3 w-3" /> Adicionar Cargo
+            </Button>
+          )}
+        </div>
+
+        {isAdding ? (
+          <Card className="border-2 border-red-100 bg-red-50/10 p-5 rounded-2xl space-y-4 text-left">
+            <h4 className="text-xs font-black uppercase tracking-wider text-red-600">
+              {editingIdx !== null ? 'Editar Cargo Anterior' : 'Adicionar Cargo Anterior'}
+            </h4>
+            
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <Label className="text-[9px] font-black uppercase text-zinc-400">Nome do Cargo / Função</Label>
+                <Input 
+                  className="h-10 rounded-xl bg-white border border-zinc-200" 
+                  placeholder="Ex: Coordenador de TI, Presidente, FR Responsible"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-[9px] font-black uppercase text-zinc-400">Equipa Relacionada</Label>
+                  <Select value={teamId} onValueChange={setTeamId}>
+                    <SelectTrigger className="h-10 rounded-xl bg-white border border-zinc-200">
+                      <SelectValue placeholder="Nenhuma" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl">
+                      <SelectItem value="none_team">Nenhuma</SelectItem>
+                      {teams.map(t => (
+                        <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-[9px] font-black uppercase text-zinc-400">Evento Relacionado</Label>
+                  <Select value={eventId} onValueChange={setEventId}>
+                    <SelectTrigger className="h-10 rounded-xl bg-white border border-zinc-200">
+                      <SelectValue placeholder="Nenhum" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl">
+                      <SelectItem value="none_event">Nenhum</SelectItem>
+                      {events.map(e => (
+                        <SelectItem key={e.id} value={e.id}>{e.title}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-[9px] font-black uppercase text-zinc-400">Descrição do Cargo (Responsabilidades / Conquistas)</Label>
+                <Textarea 
+                  className="rounded-xl min-h-[80px] bg-white text-xs border border-zinc-200" 
+                  placeholder="Explica brevemente o que fizeste..."
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-[9px] font-black uppercase text-zinc-400">Skills Desenvolvidas / Utilizadas</Label>
+                <div className="flex flex-wrap gap-1 max-h-[120px] overflow-y-auto p-2 border border-zinc-100 rounded-xl bg-white">
+                  {dynamicSkills.map(skill => {
+                    const isSel = selectedSkills.includes(skill);
+                    return (
+                      <Badge 
+                        key={skill} 
+                        variant={isSel ? "default" : "outline"}
+                        className={cn(
+                          "cursor-pointer rounded-lg text-[8px] font-bold py-1 px-2 transition-all",
+                          isSel ? "bg-red-600 hover:bg-red-700 text-white border-red-600" : "bg-zinc-50 border-zinc-200 text-zinc-500 hover:border-red-200"
+                        )}
+                        onClick={() => {
+                          if (isSel) {
+                            setSelectedSkills(selectedSkills.filter(s => s !== skill));
+                          } else {
+                            setSelectedSkills([...selectedSkills, skill]);
+                          }
+                        }}
+                      >
+                        {skill}
+                      </Badge>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2 justify-end pt-2">
+              <Button 
+                type="button" 
+                variant="outline" 
+                className="h-9 px-4 rounded-xl text-xs border border-zinc-200"
+                onClick={() => setIsAdding(false)}
+              >
+                Cancelar
+              </Button>
+              <Button 
+                type="button" 
+                className="h-9 px-4 rounded-xl text-xs bg-red-600 hover:bg-red-700 text-white font-bold"
+                onClick={handleSave}
+              >
+                Guardar Cargo
+              </Button>
+            </div>
+          </Card>
+        ) : (
+          <div className="space-y-2">
+            {previousRoles.length > 0 ? previousRoles.map((role, idx) => {
+              const isObj = typeof role === 'object' && role !== null;
+              const rTitle = isObj ? role.title : String(role);
+              const rTeamId = isObj ? role.teamId : '';
+              const rEventId = isObj ? role.eventId : '';
+              const rTeamName = rTeamId ? teams.find(t => t.id === rTeamId)?.name : '';
+              const rEventName = rEventId ? events.find(e => e.id === rEventId)?.title : '';
+
+              return (
+                <div key={idx} className="flex items-center justify-between p-3 bg-zinc-50 border border-zinc-100 rounded-xl shadow-sm">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="h-7 w-7 rounded-lg bg-white flex items-center justify-center text-zinc-400 shadow-sm shrink-0">
+                      <HistoryIcon className="h-3.5 w-3.5" />
+                    </div>
+                    <div className="space-y-0.5 min-w-0 text-left">
+                      <p className="text-xs font-bold text-zinc-900 leading-tight truncate">{rTitle}</p>
+                      {(rTeamName || rEventName) && (
+                        <p className="text-[9px] text-zinc-400 font-medium truncate">
+                          {rTeamName && `Equipa: ${rTeamName}`}
+                          {rTeamName && rEventName && ' • '}
+                          {rEventName && `Evento: ${rEventName}`}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0 ml-2">
+                    <Button 
+                      type="button"
+                      size="icon" 
+                      variant="ghost" 
+                      className="h-7 w-7 rounded-lg text-zinc-500 hover:bg-zinc-100"
+                      onClick={() => handleStartEdit(idx)}
+                    >
+                      <Edit2 className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button 
+                      type="button"
+                      size="icon" 
+                      variant="ghost" 
+                      className="h-7 w-7 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50"
+                      onClick={() => handleDelete(idx)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              );
+            }) : (
+              <div className="p-6 border-2 border-dashed border-zinc-100 rounded-xl text-center bg-zinc-50/20">
+                <p className="text-[10px] text-zinc-400 italic">Nenhum cargo anterior adicionado.</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   };
@@ -3543,9 +3935,21 @@ export default function App() {
 
   const renderMetas = () => (
     <div className="space-y-8">
-      <div className="space-y-2 text-center md:text-left">
-        <h2 className="text-3xl font-black text-red-900 uppercase tracking-tighter">Metas & Objetivos</h2>
-        <p className="text-sm text-zinc-500 font-medium">Os grandes desafios e metas coletivas de o LBG Almada.</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="space-y-2 text-left">
+          <h2 className="text-3xl font-black text-red-900 uppercase tracking-tighter">Metas & Objetivos</h2>
+          <p className="text-sm text-zinc-500 font-medium">Os grandes desafios e metas coletivas de o LBG Almada.</p>
+        </div>
+        {user?.role === 'admin' && (
+          <Button 
+            variant="outline" 
+            size="sm"
+            className="h-10 rounded-xl font-bold text-xs bg-white border-zinc-200 hover:bg-zinc-50 text-zinc-700 flex items-center gap-1.5 shadow-sm self-start sm:self-auto"
+            onClick={() => setIsManagingMetas(true)}
+          >
+            <Settings className="h-4 w-4 text-zinc-500" /> Gerir Metas
+          </Button>
+        )}
       </div>
 
       <div className="grid gap-6">
@@ -3823,150 +4227,14 @@ export default function App() {
           </Dialog>
         </Card>
 
-        <Dialog>
-          <DialogTrigger asChild>
-            <Card className="border-none bg-white shadow-sm hover:shadow-md transition-shadow cursor-pointer">
-              <CardContent className="p-4 flex flex-col items-center gap-2">
-                <div className="p-3 rounded-2xl bg-zinc-900 text-white">
-                  <Target className="h-6 w-6" />
-                </div>
-                <span className="text-xs font-bold">Metas</span>
-              </CardContent>
-            </Card>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto rounded-[2.5rem]">
-            <DialogHeader>
-              <DialogTitle className="text-2xl font-black uppercase tracking-tight">Gestão de Metas</DialogTitle>
-              <DialogDescription className="font-medium">Define os grandes objetivos coletivos.</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-6 py-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-6 bg-zinc-50 rounded-[2rem] border border-zinc-100">
-                <div className="space-y-2 col-span-1 sm:col-span-2">
-                  <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 ml-1">Título da Meta</Label>
-                  <Input 
-                    placeholder="Ex: Refatoração do Hub" 
-                    value={metaForm.title} 
-                    onChange={(e) => setMetaForm({ ...metaForm, title: e.target.value })} 
-                    className="rounded-xl border-zinc-200 h-11"
-                  />
-                </div>
-                <div className="space-y-2 col-span-1 sm:col-span-2">
-                  <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 ml-1">Descrição</Label>
-                  <div className="flex justify-between items-center bg-zinc-900 p-2 rounded-t-xl mb-0">
-                    <MarkdownToolbar onInsert={(t) => setMetaForm({ ...metaForm, description: metaForm.description + t })} />
-                    <span className="text-[8px] font-black uppercase tracking-widest text-white/40 pr-4">Editor</span>
-                  </div>
-                  <Textarea 
-                    placeholder="O que pretendemos alcançar..." 
-                    value={metaForm.description} 
-                    onChange={(e) => setMetaForm({ ...metaForm, description: e.target.value })} 
-                    className="rounded-t-none rounded-b-xl border-zinc-200 min-h-[100px]"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 ml-1">Equipa Associada (Opcional)</Label>
-                  <Select 
-                    value={metaForm.teamId || 'none'} 
-                    onValueChange={(v) => {
-                      setMetaForm({ ...metaForm, teamId: v === 'none' ? '' : v });
-                    }}
-                  >
-                    <SelectTrigger className="rounded-xl border-zinc-200 h-11"><SelectValue placeholder="Escolher equipa" /></SelectTrigger>
-                    <SelectContent className="rounded-xl">
-                      <SelectItem value="none">Nenhuma</SelectItem>
-                      {teams.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 ml-1">Evento Associado (Opcional)</Label>
-                  <Select 
-                    value={metaForm.eventId || 'none'} 
-                    onValueChange={(v) => {
-                      setMetaForm({ ...metaForm, eventId: v === 'none' ? '' : v });
-                    }}
-                  >
-                    <SelectTrigger className="rounded-xl border-zinc-200 h-11"><SelectValue placeholder="Escolher evento" /></SelectTrigger>
-                    <SelectContent className="rounded-xl">
-                      <SelectItem value="none">Nenhum</SelectItem>
-                      {events.map(e => <SelectItem key={e.id} value={e.id}>{e.title}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 ml-1">Progresso (%)</Label>
-                  <Input 
-                    type="number" 
-                    value={metaForm.progress} 
-                    onChange={(e) => setMetaForm({ ...metaForm, progress: parseInt(e.target.value) || 0 })} 
-                    className="rounded-xl border-zinc-200 h-11"
-                  />
-                </div>
-                <div className="flex gap-2 col-span-2">
-                  <Button className="flex-1 bg-red-600 hover:bg-red-700 h-12 rounded-xl font-bold uppercase tracking-widest text-xs" onClick={handleAdminUpdateMeta}>
-                    {selectedMeta ? 'Atualizar Meta' : 'Criar Meta'}
-                  </Button>
-                  {selectedMeta && (
-                    <Button variant="outline" className="h-12 rounded-xl" onClick={() => {
-                      setSelectedMeta(null);
-                      setMetaForm({
-                        title: '',
-                        description: '',
-                        progress: 0,
-                        status: 'Active',
-                        creatorId: user.uid,
-                        creatorRole: user.role,
-                        teamId: '',
-                        eventId: '',
-                        deadline: ''
-                      });
-                    }}>Novo</Button>
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Metas Ativas</h4>
-                <div className="grid gap-3">
-                  {metas.map(m => (
-                    <div key={m.id} className="flex items-center justify-between p-4 rounded-3xl bg-white border border-zinc-100 hover:shadow-md transition-shadow">
-                      <div className="flex items-center gap-4">
-                        <div className="h-10 w-10 rounded-xl bg-zinc-50 flex items-center justify-center">
-                          <Target className="h-5 w-5 text-zinc-400" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-black text-zinc-900">{m.title}</p>
-                          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">{m.progress}% Concluído</p>
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl text-zinc-400 hover:text-red-600 hover:bg-red-50" onClick={() => {
-                          setSelectedMeta(m);
-                          setMetaForm({
-                            title: m.title,
-                            description: m.description,
-                            teamId: m.teamId || '',
-                            eventId: m.eventId || '',
-                            creatorId: m.creatorId,
-                            creatorRole: m.creatorRole,
-                            progress: m.progress,
-                            deadline: m.deadline || '',
-                            status: m.status
-                          });
-                        }}>
-                          <Edit2 className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl text-zinc-400 hover:text-red-600 hover:bg-red-50" onClick={() => deleteDoc(doc(db, 'metas', m.id))}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+        <Card className="border-none bg-white shadow-sm hover:shadow-md transition-shadow cursor-pointer" onClick={() => setIsManagingMetas(true)}>
+          <CardContent className="p-4 flex flex-col items-center gap-2">
+            <div className="p-3 rounded-2xl bg-zinc-900 text-white">
+              <Target className="h-6 w-6" />
             </div>
-          </DialogContent>
-        </Dialog>
+            <span className="text-xs font-bold">Metas</span>
+          </CardContent>
+        </Card>
 
         <Dialog>
           <DialogTrigger asChild>
@@ -4678,9 +4946,12 @@ export default function App() {
                       variant="ghost" 
                       size="sm" 
                       className="h-6 text-[8px] font-black uppercase text-red-600 hover:bg-red-50 rounded-lg px-2"
-                      onClick={() => {
+                      onClick={async () => {
                         const s = prompt('Adicionar Skill ao Sistema:');
-                        if (s) toast.success(`Skill "${s}" registada no sistema. ✨`);
+                        if (s) {
+                          await addGlobalSkill(s.trim());
+                          toast.success(`Skill "${s}" registada no sistema. ✨`);
+                        }
                       }}
                     >
                       + Novo
@@ -4688,7 +4959,7 @@ export default function App() {
                   )}
                 </div>
                 <div className="flex flex-wrap gap-1.5 p-4 border-2 border-zinc-100 rounded-[1.5rem] bg-zinc-50/50 min-h-[100px]">
-                  {PREDEFINED_SKILLS.map(skill => (
+                  {dynamicSkills.map(skill => (
                     <Badge 
                       key={skill} 
                       variant={editForm.skills.includes(skill) ? "default" : "outline"}
@@ -4709,8 +4980,13 @@ export default function App() {
                 </div>
               </div>
               <div className="space-y-3">
-                <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 ml-1">Cargos Anteriores (separados por vírgula)</Label>
-                <Input className="h-14 rounded-2xl border-2 border-zinc-100 px-6 focus:border-red-200 transition-all font-medium" value={editForm.previousRoles?.join(', ')} onChange={(e) => setEditForm({...editForm, previousRoles: e.target.value.split(',').map(s => s.trim()).filter(s => s)})} />
+                <PreviousRolesManager 
+                  previousRoles={editForm.previousRoles || []} 
+                  onChange={(roles) => setEditForm({...editForm, previousRoles: roles})} 
+                  teams={teams}
+                  events={events}
+                  dynamicSkills={dynamicSkills}
+                />
               </div>
             </div>
             <div className="space-y-2">
@@ -5321,7 +5597,7 @@ export default function App() {
                         <div className="col-span-2 space-y-2">
                           <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Skills Necessárias</Label>
                           <div className="flex flex-wrap gap-1 p-2 border border-zinc-100 rounded-xl bg-zinc-50/50 max-h-[100px] overflow-y-auto">
-                            {PREDEFINED_SKILLS.map(skill => (
+                            {dynamicSkills.map(skill => (
                               <Badge 
                                 key={skill}
                                 variant={callForm.skillsRequired.includes(skill) ? 'default' : 'outline'}
@@ -5341,7 +5617,7 @@ export default function App() {
                         <div className="col-span-2 space-y-2">
                           <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Skills a Desenvolver</Label>
                           <div className="flex flex-wrap gap-1 p-2 border border-zinc-100 rounded-xl bg-zinc-50/50 max-h-[100px] overflow-y-auto">
-                            {PREDEFINED_SKILLS.map(skill => (
+                            {dynamicSkills.map(skill => (
                               <Badge 
                                 key={skill}
                                 variant={callForm.developedSkills.includes(skill) ? 'default' : 'outline'}
@@ -5405,9 +5681,20 @@ export default function App() {
             color: 'bg-green-50 text-green-600', 
             onClick: () => setIsManagingTasks(true) 
           },
-          { label: 'Anúncios', icon: Mail, color: 'bg-pink-50 text-pink-600', tab: 'home' },
+          { 
+            label: 'Anúncios', 
+            icon: Megaphone, 
+            color: 'bg-pink-50 text-pink-600', 
+            onClick: () => setIsManagingAnnouncements(true) 
+          },
+          { 
+            label: 'Skills', 
+            icon: Star, 
+            color: 'bg-yellow-50 text-yellow-600', 
+            onClick: () => setIsManagingGlobalSkills(true) 
+          },
         ].map((item) => (
-          <Card key={item.label} className="border-none bg-white shadow-sm hover:shadow-md transition-shadow cursor-pointer" onClick={() => item.onClick ? item.onClick() : setActiveTab(item.tab as any)}>
+          <Card key={item.label} className="border-none bg-white shadow-sm hover:shadow-md transition-shadow cursor-pointer" onClick={() => item.onClick()}>
             <CardContent className="p-4 flex flex-col items-center gap-2">
               <div className={cn("p-3 rounded-2xl", item.color)}>
                 <item.icon className="h-6 w-6" />
@@ -5417,6 +5704,67 @@ export default function App() {
           </Card>
         ))}
       </div>
+
+      <Dialog open={isManagingGlobalSkills} onOpenChange={setIsManagingGlobalSkills}>
+        <DialogContent className="sm:max-w-[450px] rounded-[2rem] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black uppercase tracking-tight">Gestão de Skills</DialogTitle>
+            <DialogDescription className="font-medium">Adiciona ou remove as skills globais do sistema.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Criar Nova Skill</Label>
+              <div className="flex gap-2">
+                <Input 
+                  className="h-12 rounded-xl border-zinc-200 shadow-sm" 
+                  placeholder="Nome da skill (Ex: React, Figma)" 
+                  value={newSkillName} 
+                  onChange={(e) => setNewSkillName(e.target.value)} 
+                />
+                <Button 
+                  className="bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold h-12 px-6"
+                  onClick={async () => {
+                    if (!newSkillName.trim()) return;
+                    await addGlobalSkill(newSkillName.trim());
+                    setNewSkillName('');
+                    toast.success('Skill criada!');
+                  }}
+                >
+                  Criar
+                </Button>
+              </div>
+            </div>
+            
+            <div className="space-y-3">
+              <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Skills Registadas</Label>
+              <div className="grid grid-cols-2 gap-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                {dynamicSkills.map(skill => (
+                  <div key={skill} className="flex items-center justify-between p-3 bg-zinc-50 rounded-2xl border border-zinc-100">
+                    <span className="text-xs font-bold text-zinc-700 truncate mr-2">{skill}</span>
+                    <Button 
+                      size="sm" 
+                      variant="ghost" 
+                      className="rounded-xl hover:bg-red-50 text-red-600 h-7 w-7 p-0" 
+                      onClick={() => {
+                        requestConfirmation(
+                          'Eliminar Skill',
+                          `Tens a certeza que queres eliminar permanentemente a skill "${skill}"?`,
+                          async () => {
+                            await removeGlobalSkill(skill);
+                            toast.success('Skill eliminada');
+                          }
+                        );
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isManagingTasks} onOpenChange={setIsManagingTasks}>
         <DialogContent className="sm:max-w-[600px] rounded-[2rem] max-h-[90vh] overflow-y-auto">
@@ -6007,7 +6355,7 @@ export default function App() {
     const availableSkills = Array.from(new Set(allMembers.flatMap(m => m.skills))) as string[];
     const availableTeams = teams.map(t => t.name);
     const availableRoles = Array.from(new Set(allMembers.map(m => m.position).filter(Boolean))) as string[];
-    const availableEvents = Array.from(new Set(events.filter(e => !e.isHistorical).map(e => e.title))) as string[];
+    const availableEvents = Array.from(new Set(events.filter(e => !isEventPast(e)).map(e => e.title))) as string[];
 
     let suggestions: string[] = [];
     if (searchFilter === 'skill') suggestions = availableSkills;
@@ -6190,12 +6538,23 @@ export default function App() {
 
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="space-y-2">
-            <h2 className="text-2xl font-black text-red-900 uppercase tracking-tight">Eventos o LBG</h2>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="space-y-1 text-left">
+            <h2 className="text-2xl font-black text-red-900 uppercase tracking-tight">Eventos do LBG</h2>
             <p className="text-sm text-zinc-500 font-medium">Fica a par de tudo o que acontece.</p>
           </div>
-          <div className="flex bg-zinc-100 p-1 rounded-xl">
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            {user?.role === 'admin' && (
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="h-10 rounded-xl font-bold text-xs bg-white border-zinc-200 hover:bg-zinc-50 text-zinc-700 flex items-center gap-1.5 shadow-sm"
+                onClick={() => setIsManagingEvents(true)}
+              >
+                <Settings className="h-4 w-4 text-zinc-500" /> Gerir Eventos
+              </Button>
+            )}
+            <div className="flex bg-zinc-100 p-1 rounded-xl">
             <Button 
               variant={eventViewMode === 'calendar' ? 'secondary' : 'ghost'} 
               size="sm" 
@@ -6213,62 +6572,98 @@ export default function App() {
               Lista
             </Button>
           </div>
+          </div>
         </div>
 
         {eventViewMode === 'calendar' ? renderCalendar() : (
           <div className="space-y-4">
-            {events.filter(e => !e.isHistorical).length > 0 ? events.filter(e => !e.isHistorical).sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()).map((ev) => (
-              <Card key={ev.id} className="border-none bg-white shadow-sm overflow-hidden group hover:shadow-md transition-all">
-                <CardContent className="p-0 flex h-32">
-                  <div className="w-24 bg-red-600 text-white flex flex-col items-center justify-center p-4 shrink-0">
-                    <span className="text-[10px] font-black uppercase tracking-widest opacity-80 leading-none mb-1">{new Date(ev.startDate).toLocaleDateString('pt-PT', { month: 'short' })}</span>
-                    <span className="text-3xl font-black leading-none">{new Date(ev.startDate).getDate()}</span>
-                  </div>
-                  {ev.imageUrl && (
-                    <div className="w-24 border-r border-zinc-100 overflow-hidden shrink-0 hidden sm:block">
-                      <img src={ev.imageUrl} alt={ev.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" referrerPolicy="no-referrer" />
+            {/* Sub-tabs for list view */}
+            <div className="flex gap-2 border-b border-zinc-100 pb-2">
+              <Button 
+                variant={eventSubTab === 'upcoming' ? 'default' : 'ghost'} 
+                size="sm" 
+                className={cn(
+                  "h-8 px-4 rounded-xl text-[10px] font-black uppercase tracking-wider", 
+                  eventSubTab === 'upcoming' ? "bg-red-600 hover:bg-red-700 text-white" : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+                )}
+                onClick={() => setEventSubTab('upcoming')}
+              >
+                Próximos Eventos
+              </Button>
+              <Button 
+                variant={eventSubTab === 'past' ? 'default' : 'ghost'} 
+                size="sm" 
+                className={cn(
+                  "h-8 px-4 rounded-xl text-[10px] font-black uppercase tracking-wider", 
+                  eventSubTab === 'past' ? "bg-red-600 hover:bg-red-700 text-white" : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+                )}
+                onClick={() => setEventSubTab('past')}
+              >
+                Eventos Antigos
+              </Button>
+            </div>
+
+            {(() => {
+              const filteredEvents = events.filter(e => eventSubTab === 'upcoming' ? !isEventPast(e) : isEventPast(e));
+              const sortedEvents = [...filteredEvents].sort((a, b) => {
+                const dateA = new Date(a.startDate).getTime();
+                const dateB = new Date(b.startDate).getTime();
+                return eventSubTab === 'upcoming' ? dateA - dateB : dateB - dateA;
+              });
+
+              return sortedEvents.length > 0 ? sortedEvents.map((ev) => (
+                <Card key={ev.id} className="border-none bg-white shadow-sm overflow-hidden group hover:shadow-md transition-all">
+                  <CardContent className="p-0 flex h-32">
+                    <div className="w-24 bg-red-600 text-white flex flex-col items-center justify-center p-4 shrink-0">
+                      <span className="text-[10px] font-black uppercase tracking-widest opacity-80 leading-none mb-1">{new Date(ev.startDate).toLocaleDateString('pt-PT', { month: 'short' })}</span>
+                      <span className="text-3xl font-black leading-none">{new Date(ev.startDate).getDate()}</span>
                     </div>
-                  )}
-                  <div className="p-4 flex-1 min-w-0 flex flex-col justify-between">
-                    <div className="space-y-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <h3 className="font-bold text-zinc-900 group-hover:text-red-600 transition-colors truncate">{ev.title}</h3>
-                          <div className="flex items-center gap-3 mt-1">
-                            <p className="text-[10px] text-zinc-400 font-medium flex items-center gap-1 shrink-0">
-                              <MapPin className="h-3 w-3" /> {ev.location}
-                            </p>
-                            <p className="text-[10px] text-zinc-400 font-medium flex items-center gap-1 shrink-0">
-                              <Clock className="h-3 w-3" /> {ev.time}
-                            </p>
-                          </div>
-                        </div>
-                        <Badge variant="outline" className="text-[8px] uppercase tracking-widest px-1.5 py-0 shrink-0 border-zinc-100">{ev.type}</Badge>
+                    {ev.imageUrl && (
+                      <div className="w-24 border-r border-zinc-100 overflow-hidden shrink-0 hidden sm:block">
+                        <img src={ev.imageUrl} alt={ev.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" referrerPolicy="no-referrer" />
                       </div>
-                      <p className="text-xs text-zinc-500 line-clamp-2 leading-tight">
-                        {ev.description}
-                      </p>
+                    )}
+                    <div className="p-4 flex-1 min-w-0 flex flex-col justify-between">
+                      <div className="space-y-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <h3 className="font-bold text-zinc-900 group-hover:text-red-600 transition-colors truncate">{ev.title}</h3>
+                            <div className="flex items-center gap-3 mt-1">
+                              <p className="text-[10px] text-zinc-400 font-medium flex items-center gap-1 shrink-0">
+                                <MapPin className="h-3 w-3" /> {ev.location}
+                              </p>
+                              <p className="text-[10px] text-zinc-400 font-medium flex items-center gap-1 shrink-0">
+                                <Clock className="h-3 w-3" /> {ev.time}
+                              </p>
+                            </div>
+                          </div>
+                          <Badge variant="outline" className="text-[8px] uppercase tracking-widest px-1.5 py-0 shrink-0 border-zinc-100">{ev.type}</Badge>
+                        </div>
+                        <p className="text-xs text-zinc-500 line-clamp-2 leading-tight">
+                          {ev.description}
+                        </p>
+                      </div>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-7 text-[10px] font-black p-0 text-red-600 hover:bg-transparent justify-start w-fit uppercase tracking-wider"
+                        onClick={() => setSelectedEventDetails(ev)}
+                      >
+                        Saber mais <ChevronRight className="ml-1 h-3 w-3" />
+                      </Button>
                     </div>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="h-7 text-[10px] font-black p-0 text-red-600 hover:bg-transparent justify-start w-fit uppercase tracking-wider"
-                      onClick={() => setSelectedEventDetails(ev)}
-                    >
-                      Saber mais <ChevronRight className="ml-1 h-3 w-3" />
-                    </Button>
+                  </CardContent>
+                </Card>
+              )) : (
+                <div className="flex flex-col items-center justify-center py-12 bg-white rounded-3xl border-2 border-dashed border-zinc-100 space-y-4">
+                  <Calendar className="h-10 w-10 text-zinc-200" />
+                  <div className="text-center">
+                    <p className="text-sm font-bold text-zinc-900">Ainda não há eventos</p>
+                    <p className="text-xs text-zinc-400">Fica atento aos anúncios para novidades fresquinhas! 👋</p>
                   </div>
-                </CardContent>
-              </Card>
-            )) : (
-              <div className="flex flex-col items-center justify-center py-12 bg-white rounded-3xl border-2 border-dashed border-zinc-100 space-y-4">
-                <Calendar className="h-10 w-10 text-zinc-200" />
-                <div className="text-center">
-                  <p className="text-sm font-bold text-zinc-900">Ainda não há eventos</p>
-                  <p className="text-xs text-zinc-400">Fica atento aos anúncios para novidades fresquinhas! 👋</p>
                 </div>
-              </div>
-            )}
+              )
+            })()}
           </div>
         )}
 
@@ -6341,13 +6736,13 @@ export default function App() {
                     <div className="flex items-center justify-between">
                       <h3 className="text-lg font-bold text-zinc-900">O que podes fazer?</h3>
                       <Badge variant="secondary" className="bg-green-50 text-green-700 border-green-100">
-                        {opportunities.filter(o => o.eventId === selectedEventDetails.id).length} Calls Abertas
+                        {opportunities.filter(o => o.eventId === selectedEventDetails.id && !isCallExpired(o.deadline)).length} Calls Abertas
                       </Badge>
                     </div>
                     
                     <div className="space-y-3">
-                      {opportunities.filter(o => o.eventId === selectedEventDetails.id).length > 0 ? (
-                        opportunities.filter(o => o.eventId === selectedEventDetails.id).map(opp => (
+                      {opportunities.filter(o => o.eventId === selectedEventDetails.id && !isCallExpired(o.deadline)).length > 0 ? (
+                        opportunities.filter(o => o.eventId === selectedEventDetails.id && !isCallExpired(o.deadline)).map(opp => (
                           <OpportunityCard key={opp.id} opp={opp} teams={teams} />
                         ))
                       ) : (
@@ -7220,60 +7615,39 @@ A Board do LBG Almada passa certificados formais de cargos, coordenações de pr
 
   const renderAnnouncementManager = () => (
     <Dialog open={isManagingAnnouncements} onOpenChange={setIsManagingAnnouncements}>
-      <DialogContent className="sm:max-w-[500px] rounded-[2rem] max-h-[95vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="text-2xl font-black uppercase tracking-tight">Gerir Anúncios</DialogTitle>
-          <DialogDescription>Cria ou edita anúncios para a comunidade.</DialogDescription>
-        </DialogHeader>
-          <div className="space-y-6 py-4">
-            <div className="grid grid-cols-1 gap-6">
+      <DialogContent className="sm:max-w-[900px] w-[95vw] rounded-[2rem] max-h-[90vh] overflow-y-auto p-0 border-none">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-0">
+          
+          {/* Left Column: Form (7 cols) */}
+          <div className="md:col-span-7 p-8 space-y-6 border-r border-zinc-100">
+            <DialogHeader className="space-y-1">
+              <DialogTitle className="text-2xl font-black uppercase tracking-tight text-zinc-950 flex items-center gap-2">
+                <span className="p-2 rounded-xl bg-red-50 text-red-600">
+                  <Megaphone className="h-5 w-5" />
+                </span>
+                {selectedAnnouncement ? 'Editar Anúncio' : 'Criar Anúncio'}
+              </DialogTitle>
+              <DialogDescription className="font-medium text-zinc-500">
+                {selectedAnnouncement ? 'Atualize as informações do anúncio.' : 'Publique um novo anúncio para toda a comunidade.'}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
               <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Título</Label>
+                <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Título do Anúncio</Label>
                 <Input 
-                  className="h-12 rounded-xl border-zinc-200 shadow-sm" 
-                  placeholder="Título do anúncio" 
+                  className="h-12 rounded-xl border-zinc-200 shadow-sm focus:border-red-200 transition-all font-medium" 
+                  placeholder="Ex: Abertura de candidaturas ao BEST Almada" 
                   value={announcementForm.title} 
                   onChange={(e) => setAnnouncementForm({ ...announcementForm, title: e.target.value })} 
                 />
               </div>
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Imagem do Anúncio</Label>
-                <div className="flex gap-2">
-                   <Input 
-                     className="h-10 rounded-xl border-zinc-200 text-xs flex-1 shadow-sm" 
-                     placeholder="URL da imagem..." 
-                     value={announcementForm.imageUrl} 
-                     onChange={(e) => setAnnouncementForm({ ...announcementForm, imageUrl: e.target.value })} 
-                   />
-                   <div className="relative">
-                      <input 
-                        type="file" 
-                        accept="image/*" 
-                        className="absolute inset-0 opacity-0 cursor-pointer w-10 h-10" 
-                        onChange={handleAnnouncementImageUpload}
-                      />
-                      <Button variant="outline" size="icon" className="h-10 w-10 rounded-xl bg-zinc-50">
-                        <Camera className="h-4 w-4 text-zinc-500" />
-                      </Button>
-                   </div>
-                </div>
-                {announcementForm.imageUrl && (
-                  <div className="relative aspect-video rounded-xl overflow-hidden border border-zinc-100 mt-2">
-                    <img src={announcementForm.imageUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                    <button 
-                      className="absolute top-2 right-2 p-1 bg-black/50 text-white rounded-full hover:bg-black transition-colors"
-                      onClick={() => setAnnouncementForm({...announcementForm, imageUrl: ''})}
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                )}
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Tipo</Label>
+                  <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Tipo / Categoria</Label>
                   <Select value={announcementForm.type} onValueChange={(v: any) => setAnnouncementForm({ ...announcementForm, type: v })}>
-                    <SelectTrigger className="rounded-xl border-zinc-200 h-10 shadow-sm"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="rounded-xl border-zinc-200 h-12 shadow-sm font-medium"><SelectValue /></SelectTrigger>
                     <SelectContent className="rounded-2xl">
                       <SelectItem value="general">Geral</SelectItem>
                       <SelectItem value="event">Evento</SelectItem>
@@ -7283,10 +7657,11 @@ A Board do LBG Almada passa certificados formais de cargos, coordenações de pr
                     </SelectContent>
                   </Select>
                 </div>
+
                 <div className="space-y-2">
                   <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Equipa Relacionada</Label>
-                  <Select value={announcementForm.relatedTeamId} onValueChange={(v: any) => setAnnouncementForm({ ...announcementForm, relatedTeamId: v === 'none' ? '' : v })}>
-                    <SelectTrigger className="rounded-xl border-zinc-200 h-10 shadow-sm"><SelectValue placeholder="Nenhuma" /></SelectTrigger>
+                  <Select value={announcementForm.relatedTeamId || 'none'} onValueChange={(v: any) => setAnnouncementForm({ ...announcementForm, relatedTeamId: v === 'none' ? '' : v })}>
+                    <SelectTrigger className="rounded-xl border-zinc-200 h-12 shadow-sm font-medium"><SelectValue placeholder="Nenhuma" /></SelectTrigger>
                     <SelectContent className="rounded-2xl">
                       <SelectItem value="none">Nenhuma</SelectItem>
                       {teams.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
@@ -7294,30 +7669,66 @@ A Board do LBG Almada passa certificados formais de cargos, coordenações de pr
                   </Select>
                 </div>
               </div>
+
               <div className="space-y-2">
                 <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Evento Relacionado</Label>
-                <Select value={announcementForm.relatedEventId} onValueChange={(v: any) => setAnnouncementForm({ ...announcementForm, relatedEventId: v === 'none' ? '' : v })}>
-                  <SelectTrigger className="rounded-xl border-zinc-200 h-10 shadow-sm"><SelectValue placeholder="Nenhum" /></SelectTrigger>
+                <Select value={announcementForm.relatedEventId || 'none'} onValueChange={(v: any) => setAnnouncementForm({ ...announcementForm, relatedEventId: v === 'none' ? '' : v })}>
+                  <SelectTrigger className="rounded-xl border-zinc-200 h-12 shadow-sm font-medium"><SelectValue placeholder="Nenhum" /></SelectTrigger>
                   <SelectContent className="rounded-2xl">
                     <SelectItem value="none">Nenhum</SelectItem>
                     {events.map(e => <SelectItem key={e.id} value={e.id}>{e.title}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
+
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Imagem de Capa (URL ou Upload)</Label>
+                <div className="flex gap-2">
+                   <Input 
+                     className="h-12 rounded-xl border-zinc-200 text-xs flex-1 shadow-sm font-medium" 
+                     placeholder="URL da imagem de capa..." 
+                     value={announcementForm.imageUrl} 
+                     onChange={(e) => setAnnouncementForm({ ...announcementForm, imageUrl: e.target.value })} 
+                   />
+                   <div className="relative">
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="absolute inset-0 opacity-0 cursor-pointer w-12 h-12" 
+                        onChange={handleAnnouncementImageUpload}
+                      />
+                      <Button variant="outline" size="icon" className="h-12 w-12 rounded-xl bg-zinc-50 border-zinc-200 shadow-sm hover:bg-zinc-100">
+                        <Camera className="h-4 w-4 text-zinc-500" />
+                      </Button>
+                   </div>
+                </div>
+                {announcementForm.imageUrl && (
+                  <div className="relative aspect-video rounded-2xl overflow-hidden border border-zinc-100 mt-2 shadow-sm">
+                    <img src={announcementForm.imageUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    <button 
+                      className="absolute top-2 right-2 p-1.5 bg-black/60 text-white rounded-full hover:bg-black/80 transition-colors shadow-md"
+                      onClick={() => setAnnouncementForm({...announcementForm, imageUrl: ''})}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <div className="space-y-2">
                 <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Membros Relacionados</Label>
-                <div className="flex flex-wrap gap-2 mb-2 min-h-[40px] p-2 bg-zinc-50 rounded-xl border border-zinc-100 shadow-inner">
+                <div className="flex flex-wrap gap-1.5 min-h-[40px] p-3 bg-zinc-50 rounded-2xl border border-zinc-100 shadow-inner">
                   {announcementForm.relatedPersonIds?.map(pid => {
                     const m = allMembers.find(member => member.uid === pid);
                     return (
-                      <Badge key={pid} className="bg-white border border-zinc-200 text-zinc-600 font-bold flex items-center gap-1 shadow-sm">
+                      <Badge key={pid} className="bg-white hover:bg-zinc-50 text-zinc-700 border border-zinc-200 font-bold flex items-center gap-1 shadow-sm rounded-lg py-1 px-2 text-[10px]">
                         {m?.displayName}
-                        <X className="h-3 w-3 cursor-pointer hover:text-red-600" onClick={() => setAnnouncementForm({...announcementForm, relatedPersonIds: announcementForm.relatedPersonIds.filter(id => id !== pid)})} />
+                        <X className="h-3 w-3 cursor-pointer text-zinc-400 hover:text-red-600 transition-colors" onClick={() => setAnnouncementForm({...announcementForm, relatedPersonIds: announcementForm.relatedPersonIds.filter(id => id !== pid)})} />
                       </Badge>
                     );
                   })}
                   {(!announcementForm.relatedPersonIds || announcementForm.relatedPersonIds.length === 0) && (
-                    <span className="text-[10px] text-zinc-400 italic">Nenhum membro selecionado</span>
+                    <span className="text-[10px] text-zinc-400 italic font-medium my-auto">Nenhum membro selecionado</span>
                   )}
                 </div>
                 <Select value="none" onValueChange={(v) => {
@@ -7325,72 +7736,105 @@ A Board do LBG Almada passa certificados formais de cargos, coordenações de pr
                     setAnnouncementForm({ ...announcementForm, relatedPersonIds: [...(announcementForm.relatedPersonIds || []), v] });
                   }
                 }}>
-                  <SelectTrigger className="rounded-xl border-zinc-200 h-10 shadow-sm"><SelectValue placeholder="Adicionar Membro" /></SelectTrigger>
+                  <SelectTrigger className="rounded-xl border-zinc-200 h-12 shadow-sm font-medium"><SelectValue placeholder="Adicionar Membro" /></SelectTrigger>
                   <SelectContent className="rounded-2xl">
                     <SelectItem value="none">Adicionar...</SelectItem>
                     {allMembers.map(m => <SelectItem key={m.uid} value={m.uid}>{m.displayName}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-            <div className="space-y-2 mt-4">
-              <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Membro em Destaque (Foto)</Label>
-              <div className="flex gap-2">
-                 <Input 
-                   className="h-10 rounded-xl border-zinc-200 text-xs flex-1 shadow-sm" 
-                   placeholder="URL da foto do membro..." 
-                   value={announcementForm.associatedPersonPhotoURL} 
-                   onChange={(e) => setAnnouncementForm({ ...announcementForm, associatedPersonPhotoURL: e.target.value })} 
-                 />
-                 <div className="relative">
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      className="absolute inset-0 opacity-0 cursor-pointer w-10 h-10" 
-                      onChange={handleAnnouncementPersonPhotoUpload}
-                    />
-                    <Button variant="outline" size="icon" className="h-10 w-10 rounded-xl bg-zinc-50">
-                      <User className="h-4 w-4 text-zinc-500" />
-                    </Button>
-                 </div>
-              </div>
-              {announcementForm.associatedPersonPhotoURL && (
-                <div className="flex items-center gap-3 mt-2 p-2 bg-zinc-50 rounded-xl border border-zinc-100">
-                  <Avatar className="h-9 w-9 border-2 border-white shadow-sm">
-                     <AvatarImage src={announcementForm.associatedPersonPhotoURL} />
-                     <AvatarFallback>?</AvatarFallback>
-                  </Avatar>
-                  <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Foto carregada</span>
-                  <button className="ml-auto p-1 text-zinc-400 hover:text-red-500 transition-colors" onClick={() => setAnnouncementForm({...announcementForm, associatedPersonPhotoURL: ''})}>
-                     <X className="h-4 w-4" />
-                  </button>
+
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Membro em Destaque (Foto opcional)</Label>
+                <div className="flex gap-2">
+                   <Input 
+                     className="h-12 rounded-xl border-zinc-200 text-xs flex-1 shadow-sm font-medium" 
+                     placeholder="URL da foto..." 
+                     value={announcementForm.associatedPersonPhotoURL} 
+                     onChange={(e) => setAnnouncementForm({ ...announcementForm, associatedPersonPhotoURL: e.target.value })} 
+                   />
+                   <div className="relative">
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="absolute inset-0 opacity-0 cursor-pointer w-12 h-12" 
+                        onChange={handleAnnouncementPersonPhotoUpload}
+                      />
+                      <Button variant="outline" size="icon" className="h-12 w-12 rounded-xl bg-zinc-50 border-zinc-200 shadow-sm hover:bg-zinc-100">
+                        <User className="h-4 w-4 text-zinc-500" />
+                      </Button>
+                   </div>
                 </div>
-              )}
-            </div>
-            <div className="space-y-2 mt-4">
-              <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Conteúdo</Label>
-              <div className="space-y-1">
-                <MarkdownToolbar onInsert={(snippet) => setAnnouncementForm({...announcementForm, content: (announcementForm.content || '') + snippet})} />
-                <Textarea 
-                  className="min-h-[150px] rounded-xl border-zinc-200 shadow-sm" 
-                  placeholder="Escreve aqui o anúncio... (Suporta Markdown)" 
-                  value={announcementForm.content} 
-                  onChange={(e) => setAnnouncementForm({ ...announcementForm, content: e.target.value })} 
-                />
+                {announcementForm.associatedPersonPhotoURL && (
+                  <div className="flex items-center gap-3 mt-2 p-2 bg-zinc-50 rounded-2xl border border-zinc-100 shadow-sm">
+                    <Avatar className="h-9 w-9 border-2 border-white shadow-sm">
+                       <AvatarImage src={announcementForm.associatedPersonPhotoURL} />
+                       <AvatarFallback>?</AvatarFallback>
+                    </Avatar>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Foto carregada</span>
+                    <button className="ml-auto p-1.5 text-zinc-400 hover:text-red-500 transition-colors" onClick={() => setAnnouncementForm({...announcementForm, associatedPersonPhotoURL: ''})}>
+                       <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Conteúdo do Anúncio (Markdown)</Label>
+                <div className="space-y-1">
+                  <MarkdownToolbar onInsert={(snippet) => setAnnouncementForm({...announcementForm, content: (announcementForm.content || '') + snippet})} />
+                  <Textarea 
+                    className="min-h-[140px] rounded-2xl border-zinc-200 shadow-sm font-medium focus:border-red-200 transition-all" 
+                    placeholder="Escreve aqui o conteúdo do anúncio... Suporta Markdown!" 
+                    value={announcementForm.content} 
+                    onChange={(e) => setAnnouncementForm({ ...announcementForm, content: e.target.value })} 
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <Button className="flex-1 h-12 rounded-xl bg-red-600 hover:bg-red-700 font-bold text-white shadow-lg shadow-red-100" onClick={handleAdminUpdateAnnouncement}>
+                  {selectedAnnouncement ? 'Guardar Alterações' : 'Publicar Anúncio'}
+                </Button>
+                {selectedAnnouncement && (
+                  <Button 
+                    variant="outline" 
+                    className="h-12 px-6 rounded-xl border-zinc-200 font-bold text-zinc-600 hover:bg-zinc-50"
+                    onClick={() => {
+                      setSelectedAnnouncement(null);
+                      setAnnouncementForm({ title: '', content: '', imageUrl: '', associatedPersonPhotoURL: '', relatedPersonId: '', relatedPersonIds: [], relatedTeamId: '', relatedEventId: '', type: 'general' });
+                    }}
+                  >
+                    Cancelar Edição
+                  </Button>
+                )}
               </div>
             </div>
-            <Button className="w-full h-12 rounded-xl bg-red-600 hover:bg-red-700 font-bold shadow-lg shadow-red-100" onClick={handleAdminUpdateAnnouncement}>
-              {selectedAnnouncement ? 'Atualizar' : 'Publicar'}
-            </Button>
-            
-            <div className="pt-4 space-y-2">
-              <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Anúncios Atuais</Label>
-              <div className="max-h-[200px] overflow-y-auto space-y-2 custom-scrollbar pr-2">
-                {announcements.map(ann => (
-                  <div key={ann.id} className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
-                    <span className="text-xs font-bold truncate flex-1">{ann.title}</span>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-red-600" onClick={() => {
+          </div>
+
+          {/* Right Column: Dynamic beautiful list of Announcements (5 cols) */}
+          <div className="md:col-span-5 p-8 bg-zinc-50/50 flex flex-col justify-between max-h-[90vh]">
+            <div className="space-y-4 h-full flex flex-col overflow-hidden">
+              <div className="flex items-center justify-between border-b border-zinc-100 pb-4">
+                <div className="space-y-0.5">
+                  <h4 className="text-sm font-black uppercase tracking-widest text-zinc-800">Anúncios Ativos</h4>
+                  <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">{announcements.length} publicados</p>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar min-h-[300px]">
+                {announcements.map(ann => {
+                  const isSelected = selectedAnnouncement?.id === ann.id;
+                  return (
+                    <div 
+                      key={ann.id} 
+                      className={cn(
+                        "group p-4 rounded-3xl border transition-all cursor-pointer flex flex-col gap-3",
+                        isSelected 
+                          ? "bg-red-50 border-red-200 shadow-sm" 
+                          : "bg-white border-zinc-100 hover:border-zinc-200 shadow-sm hover:shadow-md"
+                      )}
+                      onClick={() => {
                         setSelectedAnnouncement(ann);
                         setAnnouncementForm({ 
                           title: ann.title, 
@@ -7403,27 +7847,91 @@ A Board do LBG Almada passa certificados formais de cargos, coordenações de pr
                           relatedEventId: ann.relatedEventId || '',
                           type: ann.type || 'general'
                         });
-                      }}>
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-red-600" onClick={() => {
-                        requestConfirmation(
-                          'Eliminar Anúncio',
-                          `Tens a certeza que queres eliminar o anúncio "${ann.title}"?`,
-                          () => handleAdminDeleteAnnouncement(ann.id)
-                        );
-                      }}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      }}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="space-y-1">
+                          <Badge className={cn(
+                            "text-[8px] font-black uppercase tracking-widest border px-2 py-0.5 rounded-full",
+                            ann.type === 'general' ? "bg-blue-50 text-blue-700 border-blue-100" :
+                            ann.type === 'event' ? "bg-orange-50 text-orange-700 border-orange-100" :
+                            ann.type === 'team' ? "bg-green-50 text-green-700 border-green-100" :
+                            "bg-pink-50 text-pink-700 border-pink-100"
+                          )}>
+                            {ann.type}
+                          </Badge>
+                          <h5 className="font-bold text-zinc-900 group-hover:text-red-600 transition-colors text-sm line-clamp-2 leading-snug">
+                            {ann.title}
+                          </h5>
+                        </div>
+                      </div>
+
+                      {ann.imageUrl && (
+                        <div className="aspect-video w-full rounded-2xl overflow-hidden border border-zinc-100 shadow-sm">
+                          <img src={ann.imageUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between border-t border-zinc-50 pt-3 mt-1" onClick={e => e.stopPropagation()}>
+                        <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider my-auto">
+                          {ann.createdAt ? new Date(ann.createdAt).toLocaleDateString('pt-PT') : 'Recente'}
+                        </span>
+                        
+                        <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 rounded-full hover:bg-zinc-100 hover:text-zinc-900" 
+                            onClick={() => {
+                              setSelectedAnnouncement(ann);
+                              setAnnouncementForm({ 
+                                title: ann.title, 
+                                content: ann.content,
+                                imageUrl: ann.imageUrl || '',
+                                associatedPersonPhotoURL: ann.associatedPersonPhotoURL || '',
+                                relatedPersonId: ann.relatedPersonId || '',
+                                relatedPersonIds: ann.relatedPersonIds || [],
+                                relatedTeamId: ann.relatedTeamId || '',
+                                relatedEventId: ann.relatedEventId || '',
+                                type: ann.type || 'general'
+                              });
+                            }}
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 rounded-full hover:bg-red-50 text-zinc-400 hover:text-red-600" 
+                            onClick={() => {
+                              requestConfirmation(
+                                'Eliminar Anúncio',
+                                `Tens a certeza que queres eliminar o anúncio "${ann.title}"?`,
+                                () => handleAdminDeleteAnnouncement(ann.id)
+                              );
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
                     </div>
+                  );
+                })}
+                {announcements.length === 0 && (
+                  <div className="py-12 text-center bg-white rounded-3xl border border-zinc-100 shadow-sm animate-pulse">
+                    <Megaphone className="h-8 w-8 text-zinc-300 mx-auto mb-2 animate-bounce" />
+                    <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Nenhum anúncio criado</p>
                   </div>
-                ))}
+                )}
               </div>
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
-    );
+
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
 
   const renderGlossary = () => (
     <div className="space-y-6">
@@ -7748,6 +8256,68 @@ A Board do LBG Almada passa certificados formais de cargos, coordenações de pr
         </DialogContent>
       </Dialog>
 
+      <Dialog open={!!viewingPreviousRole} onOpenChange={(open) => !open && setViewingPreviousRole(null)}>
+        <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden border-none rounded-[2.5rem] max-h-[90vh] overflow-y-auto">
+          {viewingPreviousRole && (() => {
+            const isObj = typeof viewingPreviousRole === 'object' && viewingPreviousRole !== null;
+            const title = isObj ? viewingPreviousRole.title : viewingPreviousRole;
+            const description = isObj ? viewingPreviousRole.description : '';
+            const skills = isObj ? (viewingPreviousRole.skills || []) : [];
+            const teamId = isObj ? viewingPreviousRole.teamId : '';
+            const eventId = isObj ? viewingPreviousRole.eventId : '';
+            const teamName = teamId ? teams.find(t => t.id === teamId)?.name : '';
+            const eventName = eventId ? events.find(e => e.id === eventId)?.title : '';
+
+            return (
+              <div className="bg-white">
+                <div className="bg-gradient-to-br from-zinc-800 to-zinc-950 p-8 text-white">
+                  <Badge className="bg-white/20 text-white border-none text-[10px] font-black uppercase tracking-widest px-3 py-1 mb-4">
+                    Cargo Anterior desempenhado
+                  </Badge>
+                  <h3 className="text-2xl font-black uppercase tracking-tight leading-tight">{title}</h3>
+                  <div className="flex flex-wrap gap-2 mt-4">
+                    {teamName && (
+                      <Badge className="bg-white/10 text-white border border-white/20 text-[9px] font-black uppercase whitespace-nowrap">
+                        Equipa: {teamName}
+                      </Badge>
+                    )}
+                    {eventName && (
+                      <Badge className="bg-white/10 text-white border border-white/20 text-[9px] font-black uppercase whitespace-nowrap">
+                        Evento: {eventName}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="p-8 space-y-6 text-left">
+                  {description ? (
+                    <div className="prose prose-zinc max-w-none">
+                      <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2">Descrição / Contributo</h4>
+                      <p className="text-sm text-zinc-600 font-medium leading-relaxed whitespace-pre-wrap">{description}</p>
+                    </div>
+                  ) : (
+                    <p className="text-xs italic text-zinc-400">Nenhuma descrição disponível para este cargo anterior.</p>
+                  )}
+
+                  {skills.length > 0 && (
+                    <div className="space-y-3 pt-4 border-t border-zinc-100">
+                      <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Skills desenvolvidas / utilizadas</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {skills.map((skill: string) => (
+                          <Badge key={skill} variant="secondary" className="bg-zinc-100 text-zinc-600 border-none px-3 py-1 rounded-full text-[10px] font-bold">
+                            {skill}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!selectedTeamView} onOpenChange={(open) => !open && setSelectedTeamView(null)}>
         <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden border-none rounded-[2.5rem]">
           {selectedTeamView && (
@@ -7757,7 +8327,7 @@ A Board do LBG Almada passa certificados formais de cargos, coordenações de pr
                   <p className="text-sm font-medium opacity-80 mt-2">{selectedTeamView.mission}</p>
                </div>
                <div className="p-8 bg-white space-y-6">
-                  <div className="grid grid-cols-1 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                      <div 
                        className="p-4 rounded-2xl bg-zinc-50 border border-zinc-100 cursor-pointer hover:bg-zinc-100/50 hover:border-zinc-200 transition-all flex items-center justify-between group" 
                        onClick={() => {
@@ -7773,9 +8343,32 @@ A Board do LBG Almada passa certificados formais de cargos, coordenações de pr
                        </div>
                        <Avatar className="h-10 w-10 border-2 border-white shadow-sm">
                          <AvatarImage src={allMembers.find(m => m.uid === selectedTeamView.coordinatorId)?.photoURL} />
-                         <AvatarFallback>{allMembers.find(m => m.uid === selectedTeamView.coordinatorId)?.displayName.charAt(0)}</AvatarFallback>
+                         <AvatarFallback>{allMembers.find(m => m.uid === selectedTeamView.coordinatorId)?.displayName?.charAt(0) || '?'}</AvatarFallback>
                        </Avatar>
                      </div>
+
+                     {selectedTeamView.eventId && (
+                       <div 
+                         className="p-4 rounded-2xl bg-red-50/50 border border-red-100 cursor-pointer hover:bg-red-50 hover:border-red-200 transition-all flex items-center justify-between group" 
+                         onClick={() => {
+                           const ev = events.find(e => e.id === selectedTeamView.eventId);
+                           if (ev) {
+                             setSelectedTeamView(null);
+                             setSelectedEventDetails(ev);
+                           }
+                         }}
+                       >
+                         <div>
+                           <span className="text-[10px] font-black text-red-600 uppercase tracking-widest block mb-1">Evento Associado</span>
+                           <p className="text-sm font-bold text-zinc-900 group-hover:text-red-700 transition-colors truncate max-w-[130px]">
+                             {events.find(e => e.id === selectedTeamView.eventId)?.title || 'Ver Evento'}
+                           </p>
+                         </div>
+                         <div className="p-2 rounded-xl bg-white shadow-sm text-red-600 group-hover:scale-110 transition-transform">
+                           <Calendar className="h-5 w-5" />
+                         </div>
+                       </div>
+                     )}
                   </div>
                   <div className="space-y-4">
                      <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] border-l-2 border-red-600 pl-2">Membros da Equipa</h4>
@@ -7887,8 +8480,8 @@ A Board do LBG Almada passa certificados formais de cargos, coordenações de pr
                   <div className="space-y-4">
                     <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest border-l-2 border-red-600 pl-2">Oportunidades / Calls</h4>
                     <div className="space-y-4">
-                      {opportunities.filter(o => o.eventId === selectedEventDetails.id).length > 0 ? (
-                        opportunities.filter(o => o.eventId === selectedEventDetails.id).map(opp => (
+                      {opportunities.filter(o => o.eventId === selectedEventDetails.id && !isCallExpired(o.deadline)).length > 0 ? (
+                        opportunities.filter(o => o.eventId === selectedEventDetails.id && !isCallExpired(o.deadline)).map(opp => (
                           <OpportunityCard key={opp.id} opp={opp} teams={teams} />
                         ))
                       ) : (
@@ -7972,6 +8565,15 @@ A Board do LBG Almada passa certificados formais de cargos, coordenações de pr
                   className="rounded-xl min-h-[100px]" 
                   value={editForm.bio} 
                   onChange={(e) => setEditForm({...editForm, bio: e.target.value})} 
+                />
+              </div>
+              <div className="pt-2 border-t border-zinc-100">
+                <PreviousRolesManager 
+                  previousRoles={editForm.previousRoles || []} 
+                  onChange={(roles) => setEditForm({...editForm, previousRoles: roles})} 
+                  teams={teams}
+                  events={events}
+                  dynamicSkills={dynamicSkills}
                 />
               </div>
               <Button className="w-full h-12 bg-red-600 hover:bg-red-700 font-bold rounded-xl" onClick={handleUpdateProfile} disabled={loading}>
@@ -8438,7 +9040,685 @@ A Board do LBG Almada passa certificados formais de cargos, coordenações de pr
           </div>
         </DialogContent>
       </Dialog>
-      
+
+      <Dialog open={isManagingMetas} onOpenChange={setIsManagingMetas}>
+        <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto rounded-[2.5rem]">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black uppercase tracking-tight">Gestão de Metas</DialogTitle>
+            <DialogDescription className="font-medium">Define os grandes objetivos coletivos.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6 py-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-6 bg-zinc-50 rounded-[2rem] border border-zinc-100">
+              <div className="space-y-2 col-span-1 sm:col-span-2">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 ml-1">Título da Meta</Label>
+                <Input 
+                  placeholder="Ex: Refatoração do Hub" 
+                  value={metaForm.title} 
+                  onChange={(e) => setMetaForm({ ...metaForm, title: e.target.value })} 
+                  className="rounded-xl border-zinc-200 h-11"
+                />
+              </div>
+              <div className="space-y-2 col-span-1 sm:col-span-2">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 ml-1">Descrição</Label>
+                <div className="flex justify-between items-center bg-zinc-900 p-2 rounded-t-xl mb-0">
+                  <MarkdownToolbar onInsert={(t) => setMetaForm({ ...metaForm, description: metaForm.description + t })} />
+                  <span className="text-[8px] font-black uppercase tracking-widest text-white/40 pr-4">Editor</span>
+                </div>
+                <Textarea 
+                  placeholder="O que pretendemos alcançar..." 
+                  value={metaForm.description} 
+                  onChange={(e) => setMetaForm({ ...metaForm, description: e.target.value })} 
+                  className="rounded-t-none rounded-b-xl border-zinc-200 min-h-[100px]"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 ml-1">Equipa Associada (Opcional)</Label>
+                <Select 
+                  value={metaForm.teamId || 'none'} 
+                  onValueChange={(v) => {
+                    setMetaForm({ ...metaForm, teamId: v === 'none' ? '' : v });
+                  }}
+                >
+                  <SelectTrigger className="rounded-xl border-zinc-200 h-11"><SelectValue placeholder="Escolher equipa" /></SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    <SelectItem value="none">Nenhuma</SelectItem>
+                    {teams.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 ml-1">Evento Associado (Opcional)</Label>
+                <Select 
+                  value={metaForm.eventId || 'none'} 
+                  onValueChange={(v) => {
+                    setMetaForm({ ...metaForm, eventId: v === 'none' ? '' : v });
+                  }}
+                >
+                  <SelectTrigger className="rounded-xl border-zinc-200 h-11"><SelectValue placeholder="Escolher evento" /></SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    <SelectItem value="none">Nenhum</SelectItem>
+                    {events.map(e => <SelectItem key={e.id} value={e.id}>{e.title}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 ml-1">Progresso (%)</Label>
+                <Input 
+                  type="number" 
+                  value={metaForm.progress} 
+                  onChange={(e) => setMetaForm({ ...metaForm, progress: parseInt(e.target.value) || 0 })} 
+                  className="rounded-xl border-zinc-200 h-11"
+                />
+              </div>
+              <div className="flex gap-2 col-span-2">
+                <Button className="flex-1 bg-red-600 hover:bg-red-700 h-12 rounded-xl font-bold uppercase tracking-widest text-xs" onClick={handleAdminUpdateMeta}>
+                  {selectedMeta ? 'Atualizar Meta' : 'Criar Meta'}
+                </Button>
+                {selectedMeta && (
+                  <Button variant="outline" className="h-12 rounded-xl" onClick={() => {
+                    setSelectedMeta(null);
+                    setMetaForm({
+                      title: '',
+                      description: '',
+                      progress: 0,
+                      status: 'Active',
+                      creatorId: user.uid,
+                      creatorRole: user.role,
+                      teamId: '',
+                      eventId: '',
+                      deadline: ''
+                    });
+                  }}>Novo</Button>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest ml-1">Metas Ativas</h4>
+              <div className="grid gap-3">
+                {metas.map(m => (
+                  <div key={m.id} className="flex items-center justify-between p-4 rounded-3xl bg-white border border-zinc-100 hover:shadow-md transition-shadow">
+                    <div className="flex items-center gap-4">
+                      <div className="h-10 w-10 rounded-xl bg-zinc-50 flex items-center justify-center">
+                        <Target className="h-5 w-5 text-zinc-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-black text-zinc-900">{m.title}</p>
+                        <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">{m.progress}% Concluído</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl text-zinc-400 hover:text-red-600 hover:bg-red-50" onClick={() => {
+                        setSelectedMeta(m);
+                        setMetaForm({
+                          title: m.title,
+                          description: m.description,
+                          teamId: m.teamId || '',
+                          eventId: m.eventId || '',
+                          creatorId: m.creatorId,
+                          creatorRole: m.creatorRole,
+                          progress: m.progress,
+                          deadline: m.deadline || '',
+                          status: m.status
+                        });
+                      }}>
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl text-zinc-400 hover:text-red-600 hover:bg-red-50" onClick={() => deleteDoc(doc(db, 'metas', m.id))}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isManagingTeams} onOpenChange={setIsManagingTeams}>
+        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto rounded-[2rem]">
+          <DialogHeader>
+            <DialogTitle>Gestão de Equipas</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-6">
+            <div className="flex justify-between items-center bg-zinc-50 p-4 rounded-2xl border border-zinc-100">
+              <div>
+                <h4 className="text-sm font-black uppercase tracking-tight">Equipas Ativas</h4>
+                <p className="text-[10px] text-zinc-500 font-medium">Gere os departamentos e grupos do LBG.</p>
+              </div>
+              <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold" onClick={() => {
+                setSelectedTeam(null);
+                setIsCreatingTeam(true);
+                setTeamForm({ name: '', mission: '', contactEmail: '', category: 'Annual', coordinatorId: '', eventId: '', imageUrl: '' });
+              }}>
+                <Plus className="h-4 w-4 mr-1" /> Nova Equipa
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 gap-2 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
+              {teams.map(t => (
+                <div key={t.id} className={cn(
+                  "flex items-center justify-between p-4 border rounded-2xl transition-all hover:shadow-md",
+                  selectedTeam?.id === t.id ? "border-red-200 bg-red-50/30" : "bg-white border-zinc-100"
+                )}>
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-zinc-100 flex items-center justify-center text-zinc-500">
+                      <Users className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <span className="text-sm font-bold block">{t.name}</span>
+                      <span className="text-[10px] text-zinc-400 uppercase font-black tracking-widest">{t.category || 'Annual'}</span>
+                    </div>
+                  </div>
+                  <Button size="sm" variant="ghost" className="rounded-xl hover:bg-white" onClick={() => {
+                    setSelectedTeam(t);
+                    setIsCreatingTeam(false);
+                    setTeamForm({ 
+                      name: t.name, 
+                      mission: t.mission, 
+                      contactEmail: t.contactEmail, 
+                      category: t.category || 'Annual', 
+                      coordinatorId: t.coordinatorId || '',
+                      eventId: (t as any).eventId || '',
+                      imageUrl: t.imageUrl || ''
+                    });
+                  }}>
+                    <Edit2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+            {(selectedTeam || isCreatingTeam) && (
+              <div className="space-y-4 pt-6 border-t border-zinc-100 animate-in fade-in slide-in-from-top-4 duration-300">
+                <div className="flex items-center justify-between">
+                  <h5 className="text-xs font-black uppercase tracking-widest text-zinc-400">{selectedTeam ? 'Editar Equipa' : 'Nova Equipa'}</h5>
+                  <Button variant="ghost" size="sm" className="h-6 text-[10px] font-bold" onClick={() => {
+                    setSelectedTeam(null);
+                    setIsCreatingTeam(false);
+                    setTeamForm({ name: '', mission: '', contactEmail: '', category: 'Annual', coordinatorId: '', eventId: '', imageUrl: '' });
+                  }}>Cancelar</Button>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Nome da Equipa</Label>
+                    <Input className="rounded-xl border-zinc-200 focus:ring-red-500" placeholder="Ex: Marketing" value={teamForm.name} onChange={e => setTeamForm({...teamForm, name: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Email de Contacto</Label>
+                    <Input className="rounded-xl border-zinc-200 focus:ring-red-500" placeholder="equipa@best-porto.org" value={teamForm.contactEmail} onChange={e => setTeamForm({...teamForm, contactEmail: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Categoria</Label>
+                    <Select value={teamForm.category} onValueChange={(v: any) => setTeamForm({...teamForm, category: v, eventId: v === 'Annual' ? '' : teamForm.eventId})}>
+                      <SelectTrigger className="rounded-xl border-zinc-200"><SelectValue placeholder="Categoria" /></SelectTrigger>
+                      <SelectContent className="rounded-2xl">
+                        <SelectItem value="Annual">Annual</SelectItem>
+                        <SelectItem value="Events">Events</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {teamForm.category === 'Events' && (
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Evento Associado</Label>
+                      <Select value={(teamForm as any).eventId || ''} onValueChange={(v: any) => setTeamForm({...teamForm, eventId: v} as any)}>
+                        <SelectTrigger className="rounded-xl border-zinc-200"><SelectValue placeholder="Selecionar Evento" /></SelectTrigger>
+                        <SelectContent className="rounded-2xl">
+                          {events.map(e => (
+                            <SelectItem key={e.id} value={e.id}>{e.title}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Coordenador</Label>
+                    <Select value={teamForm.coordinatorId} onValueChange={(v: any) => setTeamForm({...teamForm, coordinatorId: v})}>
+                      <SelectTrigger className="rounded-xl border-zinc-200"><SelectValue placeholder="Selecionar Coordenador" /></SelectTrigger>
+                      <SelectContent className="rounded-2xl">
+                        <SelectItem value="none">Nenhum</SelectItem>
+                        {allMembers.filter(m => m.teamId === selectedTeam?.id).map(m => (
+                          <SelectItem key={m.uid} value={m.uid}>{m.displayName}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="col-span-2 space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Missão</Label>
+                    <Textarea className="rounded-xl border-zinc-200 focus:ring-red-500 min-h-[80px]" placeholder="Qual o objetivo desta equipa?" value={teamForm.mission} onChange={e => setTeamForm({...teamForm, mission: e.target.value})} />
+                  </div>
+                  <div className="col-span-2 space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Imagem da Equipa (URL ou Upload)</Label>
+                    <div className="flex gap-2">
+                       <Input 
+                         className="h-10 rounded-xl border-zinc-200 text-xs flex-1" 
+                         placeholder="URL da imagem..." 
+                         value={teamForm.imageUrl} 
+                         onChange={(e) => setTeamForm({ ...teamForm, imageUrl: e.target.value })} 
+                       />
+                       <div className="relative">
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            className="absolute inset-0 opacity-0 cursor-pointer w-10 h-10" 
+                            onChange={handleTeamImageUpload}
+                          />
+                          <Button variant="outline" size="icon" className="h-10 w-10 rounded-xl bg-zinc-50">
+                            <Camera className="h-4 w-4 text-zinc-500" />
+                          </Button>
+                       </div>
+                    </div>
+                    {teamForm.imageUrl && (
+                      <div className="relative aspect-video rounded-xl overflow-hidden border border-zinc-100 mt-2">
+                        <img src={teamForm.imageUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        <button 
+                          className="absolute top-2 right-2 p-1 bg-black/50 text-white rounded-full hover:bg-black transition-colors"
+                          onClick={() => setTeamForm({...teamForm, imageUrl: ''})}
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="space-y-3">
+                  <Button className="w-full h-12 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold shadow-lg shadow-red-100" onClick={handleAdminUpdateTeam} disabled={loading}>
+                    {selectedTeam ? 'Atualizar Equipa' : 'Criar Equipa'}
+                  </Button>
+                  {selectedTeam && (
+                    <Button 
+                      variant="ghost" 
+                      className="w-full text-red-600 font-bold text-[10px] uppercase tracking-widest p-0 h-auto hover:bg-transparent hover:underline"
+                      onClick={() => {
+                        requestConfirmation(
+                          'Eliminar Equipa',
+                          `Tens a certeza que queres eliminar permanentemente a equipa "${selectedTeam.name}"?`,
+                          async () => {
+                            await deleteDoc(doc(db, 'teams', selectedTeam.id));
+                            toast.success('Equipa eliminada');
+                            setIsManagingTeams(false);
+                            setSelectedTeam(null);
+                          }
+                        );
+                      }}
+                    >
+                      Eliminar Equipa
+                    </Button>
+                  )}
+                </div>
+                
+                {selectedTeam && (
+                  <div className="space-y-4 border-t pt-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs font-black uppercase tracking-widest text-zinc-400">Membros da Equipa</Label>
+                        <div className="space-y-2 w-full">
+                          {allMembers.filter(m => m.teamId === selectedTeam.id).map(m => (
+                            <div key={m.uid} className="flex items-center gap-2 p-2 bg-white rounded-xl border border-zinc-100">
+                              <Avatar className="h-6 w-6">
+                                <AvatarImage src={m.photoURL} />
+                                <AvatarFallback>{m.displayName.charAt(0)}</AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[10px] font-bold truncate">{m.displayName}</p>
+                                <Input 
+                                  className="h-6 text-[9px] px-2 rounded-lg border-zinc-100 bg-zinc-50 focus:bg-white transition-colors"
+                                  placeholder="Cargo na equipa"
+                                  defaultValue={m.position}
+                                  onBlur={async (e) => {
+                                    if (e.target.value !== m.position) {
+                                      await updateDoc(doc(db, 'users', m.uid), { position: e.target.value });
+                                      toast.success(`Cargo de ${m.displayName} atualizado`);
+                                    }
+                                  }}
+                                />
+                              </div>
+                              <Button variant="ghost" size="icon" className="h-6 w-6 text-zinc-400 hover:text-red-600" onClick={() => {
+                                requestConfirmation(
+                                  'Remover da Equipa',
+                                  `Tens a certeza que queres remover ${m.displayName} desta equipa?`,
+                                  async () => {
+                                    await updateDoc(doc(db, 'users', m.uid), { teamId: null });
+                                    toast.success(`${m.displayName} removido da equipa`);
+                                  }
+                                );
+                              }}>
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          ))}
+                          <Select onValueChange={async (v: string) => {
+                            await updateDoc(doc(db, 'users', v), { teamId: selectedTeam.id });
+                            toast.success("Membro adicionado à equipa");
+                          }}>
+                            <SelectTrigger className="h-8 w-full text-[10px] rounded-xl border-dashed"><SelectValue placeholder="+ Adicionar Membro" /></SelectTrigger>
+                            <SelectContent className="rounded-2xl">
+                              {allMembers.filter(m => m.teamId !== selectedTeam.id).map(m => (
+                                <SelectItem key={m.uid} value={m.uid}>{m.displayName}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-black uppercase tracking-widest text-zinc-400">Roles / Calls da Equipa</Label>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => {
+                            setMeetingForm({ 
+                              teamId: selectedTeam.id, 
+                              eventId: '',
+                              title: '', 
+                              description: '', 
+                              date: '', 
+                              time: '', 
+                              hostId: user?.uid || '', 
+                              responsibleIds: [] as string[], 
+                              isOpenCall: false 
+                            });
+                            setIsManagingMeetings(true);
+                          }}>Nova Reunião</Button>
+                          <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => {
+                            setCallForm({ 
+                              title: '', 
+                              description: '', 
+                              difficulty: 'Medium', 
+                              category: 'Local', 
+                              associationType: 'team',
+                              teamId: selectedTeam.id,
+                              eventId: '',
+                              skillsRequired: [],
+                              developedSkills: [],
+                              qualityLevel: 1,
+                              assignedMemberIds: [],
+                              deadline: '',
+                              applicationLink: ''
+                            });
+                            setSelectedCall(null);
+                            setIsCreatingCall(true);
+                            setIsManagingCalls(true);
+                          }}>Nova Call</Button>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        {opportunities.filter(o => o.teamId === selectedTeam.id || (selectedTeam.eventId && o.eventId === selectedTeam.eventId)).map(opp => (
+                          <div key={opp.id} className="flex items-center justify-between p-2 bg-zinc-50 rounded-lg border border-zinc-100">
+                            <div className="flex flex-col">
+                              <span className="text-xs font-bold">{opp.title}</span>
+                            </div>
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
+                              setSelectedCall(opp);
+                              setCallForm({ 
+                                ...opp, 
+                                skillsRequired: opp.skillsRequired || [],
+                                developedSkills: opp.developedSkills || [],
+                                teamId: opp.teamId || '',
+                                eventId: opp.eventId || '',
+                                assignedMemberIds: opp.assignedMemberIds || [],
+                                deadline: opp.deadline || ''
+                              } as any);
+                              setIsManagingCalls(true);
+                            }}>
+                              <Edit2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <Button className="w-full" onClick={handleAdminUpdateTeam}>{selectedTeam ? 'Atualizar' : 'Criar'}</Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isManagingCalls} onOpenChange={setIsManagingCalls}>
+        <DialogContent className="sm:max-w-[500px] rounded-[2rem] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black uppercase tracking-tight">Gestão de Calls</DialogTitle>
+            <DialogDescription className="font-medium">Cria oportunidades para membros se juntarem a equipas ou eventos.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6">
+            <div className="flex justify-between items-center bg-zinc-50 p-4 rounded-2xl border border-zinc-100">
+              <div>
+                <h4 className="text-sm font-black uppercase tracking-tight">Oportunidades Ativas</h4>
+                <p className="text-[10px] text-zinc-500 font-medium">Cria calls para equipas ou eventos.</p>
+              </div>
+              <Button size="sm" className="bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-bold" onClick={() => {
+                setSelectedCall(null);
+                setIsCreatingCall(true);
+                setCallForm({ 
+                  title: '', 
+                  description: '', 
+                  difficulty: 'Medium', 
+                  category: 'Local', 
+                  associationType: 'team',
+                  teamId: '', 
+                  eventId: '', 
+                  skillsRequired: [],
+                  developedSkills: [],
+                  qualityLevel: 1,
+                  assignedMemberIds: [],
+                  deadline: '',
+                  applicationLink: ''
+                });
+              }}>
+                <Plus className="h-4 w-4 mr-1" /> Nova Call
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 gap-2 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
+              {opportunities.map(o => (
+                <div key={o.id} className={cn(
+                  "flex items-center justify-between p-4 border rounded-2xl transition-all hover:shadow-md",
+                  selectedCall?.id === o.id ? "border-orange-200 bg-orange-50/30" : "bg-white border-zinc-100"
+                )}>
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center">
+                      <Briefcase className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <span className="text-sm font-bold block">{o.title}</span>
+                      <span className="text-[10px] text-zinc-400 uppercase font-black tracking-widest">
+                        {o.teamId ? `Equipa: ${teams.find(t => t.id === o.teamId)?.name}` : o.eventId ? `Evento: ${events.find(e => e.id === o.eventId)?.title}` : 'Sem Associação'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex gap-1">
+                    <Button size="sm" variant="ghost" className="rounded-xl hover:bg-white h-8 w-8 p-0" onClick={() => {
+                      setSelectedCall(o);
+                      setIsCreatingCall(false);
+                      setCallForm({ 
+                        ...o, 
+                        associationType: o.teamId ? 'team' : 'event',
+                        skillsRequired: o.skillsRequired || [],
+                        developedSkills: o.developedSkills || [],
+                        teamId: o.teamId || '',
+                        eventId: o.eventId || '',
+                        assignedMemberIds: o.assignedMemberIds || [],
+                        deadline: o.deadline || '',
+                        applicationLink: o.applicationLink || '',
+                        qualityLevel: o.qualityLevel || 1
+                      } as any);
+                    }}>
+                      <Edit2 className="h-4 w-4 text-zinc-400" />
+                    </Button>
+                    <Button size="sm" variant="ghost" className="rounded-xl hover:bg-red-50 text-red-600 h-8 w-8 p-0" onClick={() => {
+                      requestConfirmation(
+                        'Eliminar Call',
+                        `Tens a certeza que queres eliminar permanentemente a call "${o.title}"?`,
+                        async () => {
+                          await deleteDoc(doc(db, 'roles', o.id));
+                          toast.success('Call eliminada');
+                        }
+                      );
+                    }}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {(selectedCall || isCreatingCall) && (
+              <div className="space-y-4 pt-6 border-t border-zinc-100 animate-in fade-in slide-in-from-top-4 duration-300">
+                <div className="flex items-center justify-between">
+                  <h5 className="text-xs font-black uppercase tracking-widest text-zinc-400">{selectedCall ? 'Editar Call' : 'Nova Call'}</h5>
+                  <Button variant="ghost" size="sm" className="h-6 text-[10px] font-bold" onClick={() => {
+                    setSelectedCall(null);
+                    setIsCreatingCall(false);
+                  }}>Cancelar</Button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="col-span-1 sm:col-span-2 space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Título</Label>
+                    <Input className="rounded-xl border-zinc-200 focus:ring-orange-500" placeholder="Título da Call" value={callForm.title} onChange={e => setCallForm({...callForm, title: e.target.value})} />
+                  </div>
+                  <div className="col-span-1 sm:col-span-2 space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Descrição</Label>
+                    <div className="flex justify-between items-center bg-zinc-900 p-2 rounded-t-xl mb-0">
+                      <MarkdownToolbar onInsert={(t) => setCallForm({ ...callForm, description: callForm.description + t })} />
+                      <span className="text-[8px] font-black uppercase tracking-widest text-white/40 pr-4">Editor</span>
+                    </div>
+                    <Textarea className="rounded-t-none rounded-b-xl border-zinc-200 focus:ring-orange-500 min-h-[80px]" placeholder="Descrição da oportunidade" value={callForm.description} onChange={e => setCallForm({...callForm, description: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Tipo de Associação</Label>
+                    <Select value={callForm.associationType} onValueChange={(v: any) => setCallForm({...callForm, associationType: v, teamId: '', eventId: ''})}>
+                      <SelectTrigger className="rounded-xl border-zinc-200"><SelectValue /></SelectTrigger>
+                      <SelectContent className="rounded-2xl">
+                        <SelectItem value="team">Equipa</SelectItem>
+                        <SelectItem value="event">Evento</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                      {callForm.associationType === 'team' ? 'Selecionar Equipa' : 'Selecionar Evento'}
+                    </Label>
+                    {callForm.associationType === 'team' ? (
+                      <Select value={callForm.teamId} onValueChange={v => setCallForm({...callForm, teamId: v})}>
+                        <SelectTrigger className="rounded-xl border-zinc-200"><SelectValue placeholder="Escolher Equipa" /></SelectTrigger>
+                        <SelectContent className="rounded-2xl">
+                          {teams.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Select value={callForm.eventId} onValueChange={v => setCallForm({...callForm, eventId: v})}>
+                        <SelectTrigger className="rounded-xl border-zinc-200"><SelectValue placeholder="Escolher Evento" /></SelectTrigger>
+                        <SelectContent className="rounded-2xl">
+                          {events.map(e => <SelectItem key={e.id} value={e.id}>{e.title}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+                  <div className="col-span-2 space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Link de Candidatura</Label>
+                    <Input className="rounded-xl border-zinc-200 focus:ring-orange-500" placeholder="https://forms.gle/..." value={callForm.applicationLink} onChange={e => setCallForm({...callForm, applicationLink: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Tipo de Call</Label>
+                    <Select value={callForm.category} onValueChange={(v: any) => setCallForm({...callForm, category: v})}>
+                      <SelectTrigger className="rounded-xl border-zinc-200"><SelectValue /></SelectTrigger>
+                      <SelectContent className="rounded-2xl">
+                        <SelectItem value="Local">Nacional</SelectItem>
+                        <SelectItem value="International">Internacional</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Dificuldade (1-5 Estrelas)</Label>
+                    <div className="flex items-center gap-4 bg-zinc-50 p-3 rounded-xl border border-zinc-200">
+                      <div className="flex gap-1">
+                        {[1, 2, 3, 4, 5].map(star => (
+                          <Star 
+                            key={star} 
+                            className={cn(
+                              "h-6 w-6 cursor-pointer transition-all", 
+                              star <= (callForm.qualityLevel || 1) ? "text-yellow-500 fill-yellow-500 scale-110" : "text-zinc-300 hover:text-yellow-200"
+                            )}
+                            onClick={() => setCallForm({...callForm, qualityLevel: star})}
+                          />
+                        ))}
+                      </div>
+                      <span className="text-xs font-bold text-zinc-600">Nível {callForm.qualityLevel || 1}</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Deadline</Label>
+                    <Input className="rounded-xl border-zinc-200 focus:ring-orange-500" type="date" value={callForm.deadline} onChange={e => setCallForm({...callForm, deadline: e.target.value})} />
+                  </div>
+                  
+                  <div className="col-span-2 space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Skills Necessárias</Label>
+                    <div className="flex flex-wrap gap-1 p-2 border border-zinc-100 rounded-xl bg-zinc-50/50 max-h-[100px] overflow-y-auto">
+                      {dynamicSkills.map(skill => (
+                        <Badge 
+                          key={skill}
+                          variant={callForm.skillsRequired.includes(skill) ? 'default' : 'outline'}
+                          className="cursor-pointer text-[9px] px-2 py-0"
+                          onClick={() => {
+                            const current = callForm.skillsRequired;
+                            const next = current.includes(skill) ? current.filter(s => s !== skill) : [...current, skill];
+                            setCallForm({...callForm, skillsRequired: next});
+                          }}
+                        >
+                          {skill}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="col-span-2 space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Skills a Desenvolver</Label>
+                    <div className="flex flex-wrap gap-1 p-2 border border-zinc-100 rounded-xl bg-zinc-50/50 max-h-[100px] overflow-y-auto">
+                      {dynamicSkills.map(skill => (
+                        <Badge 
+                          key={skill}
+                          variant={callForm.developedSkills.includes(skill) ? 'default' : 'outline'}
+                          className="cursor-pointer text-[9px] px-2 py-0 bg-orange-50 text-orange-700 border-orange-100 hover:bg-orange-100"
+                          onClick={() => {
+                            const current = callForm.developedSkills;
+                            const next = current.includes(skill) ? current.filter(s => s !== skill) : [...current, skill];
+                            setCallForm({...callForm, developedSkills: next});
+                          }}
+                        >
+                          {skill}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <Button className="w-full h-12 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold shadow-lg shadow-orange-100" onClick={handleAdminUpdateCall} disabled={loading}>
+                  {selectedCall ? 'Atualizar Call' : 'Criar Call'}
+                </Button>
+                {selectedCall && (
+                  <Button 
+                    variant="ghost" 
+                    className="w-full text-red-600 font-bold text-xs" 
+                    onClick={() => {
+                      requestConfirmation(
+                        'Eliminar Call',
+                        `Tens a certeza que queres eliminar a call "${selectedCall.title}"?`,
+                        async () => {
+                          await deleteDoc(doc(db, 'opportunities', selectedCall.id));
+                          toast.success('Call eliminada');
+                          setIsManagingCalls(false);
+                          setSelectedCall(null);
+                        }
+                      );
+                    }}
+                  >
+                    Eliminar Call permanentemente
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {renderAnnouncementManager()}
       {renderConfirmationDialog()}
       <Toaster position="top-center" />
