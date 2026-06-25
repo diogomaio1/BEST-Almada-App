@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { motion } from 'motion/react';
-import { Home, Users, Briefcase, Trophy, User, Settings, Zap, Target, Shield, Menu, Info, Globe, HelpCircle, Calendar, Rocket, Award, BookOpen, MessageSquare, MoreVertical, ChevronRight, Star, Heart, Search } from 'lucide-react';
+import { Home, Users, Briefcase, Trophy, User, Settings, Zap, Target, Shield, Menu, Info, Globe, HelpCircle, Calendar, Rocket, Award, BookOpen, MessageSquare, MoreVertical, ChevronRight, Star, Heart, Search, Download, Smartphone, Laptop, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -59,6 +59,45 @@ export default function Layout({
 }: LayoutProps) {
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
   const [openSection, setOpenSection] = React.useState<string>('comunidade');
+  const [deferredPrompt, setDeferredPrompt] = React.useState<any>(null);
+  const [isInstalled, setIsInstalled] = React.useState(false);
+  const [showHowToDialog, setShowHowToDialog] = React.useState(false);
+
+  React.useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    const handleAppInstalled = () => {
+      setIsInstalled(true);
+      setDeferredPrompt(null);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
+      setIsInstalled(true);
+    }
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+      }
+    } else {
+      setShowHowToDialog(true);
+    }
+  };
   
   const navItems = [
     { id: 'teams', icon: Users, label: 'Equipas' },
@@ -326,6 +365,49 @@ export default function Layout({
                       </section>
                     </div>
 
+                    {/* Instalação PWA */}
+                    <div className="bg-red-50/50 border border-red-100/50 rounded-2xl p-4 mt-2 mb-4 space-y-3">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 rounded-xl bg-red-100 text-red-600 shrink-0">
+                          <Download className="h-4 w-4" />
+                        </div>
+                        <div className="space-y-0.5 text-left">
+                          <p className="text-xs font-black text-red-950 uppercase tracking-tight">BEST Hub no ecrã principal</p>
+                          <p className="text-[10px] text-zinc-500 font-medium leading-normal">
+                            {isInstalled 
+                              ? "Já tens a aplicação instalada no teu dispositivo!" 
+                              : "Instala o Hub para acesso instantâneo e uma experiência de app nativa."}
+                          </p>
+                        </div>
+                      </div>
+
+                      {isInstalled ? (
+                        <div className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-700 text-[10px] font-bold">
+                          <Check className="h-3.5 w-3.5" />
+                          <span>Aplicação Instalada com Sucesso</span>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-2">
+                          {deferredPrompt ? (
+                            <Button 
+                              onClick={handleInstallClick}
+                              className="w-full bg-red-600 hover:bg-red-700 text-white font-bold text-[11px] h-9 rounded-xl shadow-md shadow-red-200 uppercase tracking-wider cursor-pointer"
+                            >
+                              Instalar Agora
+                            </Button>
+                          ) : (
+                            <Button 
+                              variant="outline"
+                              onClick={() => setShowHowToDialog(true)}
+                              className="w-full border-red-200 hover:bg-red-50 text-red-600 font-bold text-[11px] h-9 rounded-xl uppercase tracking-wider cursor-pointer"
+                            >
+                              Como Instalar? 📱
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
                     <div className="pt-4 pb-8 text-center">
                       <p className="text-[10px] text-zinc-400 font-medium">BEST Almada Hub v1.0</p>
                       <p className="text-[8px] text-zinc-400/80 mt-1 font-bold tracking-wider uppercase">Created by: Diogo Maio</p>
@@ -403,6 +485,56 @@ export default function Layout({
           ))}
         </div>
       </nav>
+
+      {/* PWA How-To Dialog */}
+      <Dialog open={showHowToDialog} onOpenChange={setShowHowToDialog}>
+        <DialogContent className="sm:max-w-[420px] rounded-[2rem] p-6 gap-6">
+          <DialogHeader className="text-left">
+            <DialogTitle className="text-xl font-black text-red-900 uppercase tracking-tight flex items-center gap-2">
+              <Smartphone className="h-5 w-5 text-red-600" />
+              <span>Como instalar o BEST Hub</span>
+            </DialogTitle>
+            <DialogDescription className="text-zinc-500 text-xs font-medium">
+              Siga os passos de acordo com o seu telemóvel ou computador:
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 text-xs text-zinc-700 leading-relaxed">
+            {/* iOS (Safari) */}
+            <div className="p-3.5 rounded-xl bg-zinc-50 border border-zinc-100 space-y-2 text-left">
+              <h5 className="font-bold text-zinc-900 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                No iPhone / iPad (Safari)
+              </h5>
+              <ol className="list-decimal pl-4 space-y-1 text-[11px] text-zinc-600 font-medium">
+                <li>Toque no botão de <strong>Partilhar</strong> <span className="bg-zinc-200 px-1.5 py-0.5 rounded text-[10px] border">⎙</span> (barra inferior).</li>
+                <li>Deslize para baixo e selecione <strong>Adicionar ao Ecrã Principal</strong>.</li>
+                <li>Toque em <strong>Adicionar</strong> no canto superior direito.</li>
+              </ol>
+            </div>
+
+            {/* Android / PC Chrome */}
+            <div className="p-3.5 rounded-xl bg-zinc-50 border border-zinc-100 space-y-2 text-left">
+              <h5 className="font-bold text-zinc-900 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                No Android / PC (Google Chrome)
+              </h5>
+              <ol className="list-decimal pl-4 space-y-1 text-[11px] text-zinc-600 font-medium">
+                <li>Toque no botão de <strong>Mais Opções</strong> (os 3 pontos <span className="font-bold">⋮</span> no canto superior direito).</li>
+                <li>Selecione <strong>Instalar aplicação</strong> ou <strong>Adicionar ao ecrã principal</strong>.</li>
+                <li>Confirme a instalação para criar o ícone da aplicação.</li>
+              </ol>
+            </div>
+          </div>
+
+          <Button 
+            onClick={() => setShowHowToDialog(false)}
+            className="w-full bg-red-600 hover:bg-red-700 font-black uppercase tracking-wider text-xs h-11 rounded-xl cursor-pointer"
+          >
+            Entendido
+          </Button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
