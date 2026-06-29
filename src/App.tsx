@@ -53,7 +53,8 @@ import {
   Phone,
   Lock as LockIcon,
   BadgeCheck,
-  History as HistoryIcon
+  History as HistoryIcon,
+  Sparkles
 } from 'lucide-react';
 import { Checkbox } from "@/components/ui/checkbox";
 import { Toaster } from '@/components/ui/sonner';
@@ -61,6 +62,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 import { db, auth } from './lib/firebase';
+import { signInWithCustomToken, signOut } from 'firebase/auth';
 import { supabase, getSupabaseConfigInfo, initializeDynamicSupabase } from './lib/supabase';
 import { 
   doc, 
@@ -304,6 +306,39 @@ const PREDEFINED_SKILLS = [
   'Logistics', 'Teamwork', 'Communication', 'Problem Solving', 'Time Management'
 ];
 
+const ONBOARDING_STEPS = [
+  { id: 'profile', label: 'Configurar o teu Perfil', description: 'Preenche a tua biografia, foto de perfil, curso e número de telemóvel para os outros membros te conhecerem.', auto: true },
+  { id: 'mentor', label: 'Entrar numa Família', description: 'Junta-te a uma das famílias do LBG Almada para conviveres e participares nos desafios.', auto: false },
+  { id: 'slack', label: 'Acesso ao WhatsApp Geral & Discord', description: 'Entra no grupo oficial de WhatsApp e no servidor de Discord do LBG Almada.', auto: false },
+  { id: 'moodie', label: 'Participar de um Moodie', description: 'Marca presença num Moodie, a atividade social/espontânea do grupo para conviver com outros membros.', auto: false },
+  { id: 'meeting', label: 'Participar de uma Reunião Geral', description: 'Assiste e participa numa reunião geral do LBG Almada para acompanhares o grupo.', auto: false },
+  { id: 'team', label: 'Entrar num Departamento ou Equipa', description: 'Liga-te a um departamento ou equipa local do BEST Almada para começar a colaborar.', auto: true }
+];
+
+const getOnboardingProgress = (user: UserProfile | null) => {
+  if (!user) return { percent: 0, completedCount: 0, totalCount: ONBOARDING_STEPS.length };
+  let completedCount = 0;
+  
+  const isProfileConfigured = !!(user.photoURL && user.bio && user.course && user.phoneNumber);
+  const isTeamConfigured = !!user.teamId;
+
+  ONBOARDING_STEPS.forEach(step => {
+    if (step.id === 'profile') {
+      if (isProfileConfigured) completedCount++;
+    } else if (step.id === 'team') {
+      if (isTeamConfigured) completedCount++;
+    } else {
+      if (user.onboardingCompletedSteps?.includes(step.id)) completedCount++;
+    }
+  });
+  
+  return {
+    percent: Math.round((completedCount / ONBOARDING_STEPS.length) * 100),
+    completedCount,
+    totalCount: ONBOARDING_STEPS.length
+  };
+};
+
 const MarkdownToolbar = ({ onInsert }: { onInsert: (text: string) => void }) => (
   <div className="flex overflow-x-auto whitespace-nowrap gap-1 p-1 bg-zinc-100/50 rounded-xl border border-zinc-200/40 mb-1 sticky top-0 z-10 backdrop-blur-sm shadow-sm custom-scrollbar no-scrollbar scrollbar-hide">
     {[
@@ -447,6 +482,7 @@ export default function App() {
   const [user, setUser] = React.useState<UserProfile | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [isAuthReady, setIsAuthReady] = React.useState(false);
+  const [isFirebaseSynced, setIsFirebaseSynced] = React.useState(false);
 
   // Supabase specific auth state
   const [loginMode, setLoginMode] = React.useState<'google' | 'email'>('google');
@@ -552,8 +588,11 @@ export default function App() {
     startDate: '', // YYYY-MM-DD
     endDate: '',   // YYYY-MM-DD
     time: '',
+    startTime: '',
+    endTime: '',
     location: '',
     type: 'Local' as any,
+    types: [] as string[],
     imageUrl: '',
     isHistorical: false,
     coordinatorId: '',
@@ -781,6 +820,27 @@ export default function App() {
             const supabaseUser = session?.user;
             if (supabaseUser) {
               console.log("User authenticated via Supabase:", supabaseUser.id);
+
+              // Obtain complementary Firebase Auth session via Custom Token
+              try {
+                const tokenResponse = await fetch("/api/firebase-token", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ userId: supabaseUser.id })
+                });
+                const tokenData = await tokenResponse.json();
+                if (tokenData.token) {
+                  await signInWithCustomToken(auth, tokenData.token);
+                  setIsFirebaseSynced(true);
+                  console.log("Authenticated complementarily with Firebase Auth using Custom Token");
+                } else {
+                  console.warn("Could not retrieve Firebase custom token. Real-time Firebase listeners may fail permissions checks.");
+                  setIsFirebaseSynced(false);
+                }
+              } catch (tokenErr) {
+                console.error("Firebase custom token authentication error:", tokenErr);
+                setIsFirebaseSynced(false);
+              }
               
               if (unsubUser) {
                 unsubUser();
@@ -852,6 +912,12 @@ export default function App() {
                 setLoading(false);
                 setIsAuthReady(true);
                 clearTimeout(timeoutId);
+              }, (error) => {
+                console.error("Firestore error on current user profile subscription:", error);
+                handleFirestoreError(error, OperationType.GET, `users/${supabaseUser.id}`);
+                setLoading(false);
+                setIsAuthReady(true);
+                clearTimeout(timeoutId);
               });
             } else {
               console.log("No user authenticated.");
@@ -859,6 +925,8 @@ export default function App() {
                 unsubUser();
                 unsubUser = null;
               }
+              signOut(auth).catch(err => console.error("Firebase signOut error:", err));
+              setIsFirebaseSynced(false);
               setUser(null);
               setLoading(false);
               setIsAuthReady(true);
@@ -952,7 +1020,7 @@ export default function App() {
 
   // Real-time Listeners
   React.useEffect(() => {
-    if (!isAuthReady || !user) return;
+    if (!isAuthReady || !user || !isFirebaseSynced) return;
 
     // Publicly accessible listeners (teams, events and allMembers for profile view)
     const unsubTeams = onSnapshot(collection(db, 'teams'), (snapshot) => {
@@ -1138,7 +1206,7 @@ export default function App() {
       unsubAnnouncements();
       unsubGlossary();
     };
-  }, [isAuthReady, user]);
+  }, [isAuthReady, user, isFirebaseSynced]);
 
   const handleLogin = async () => {
     console.log("Login initiated...");
@@ -1225,6 +1293,40 @@ export default function App() {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleOnboardingStep = async (stepId: string) => {
+    if (!user) return;
+    try {
+      const currentCompleted = user.onboardingCompletedSteps || [];
+      let newCompleted: string[];
+      if (currentCompleted.includes(stepId)) {
+        newCompleted = currentCompleted.filter(id => id !== stepId);
+      } else {
+        newCompleted = [...currentCompleted, stepId];
+      }
+      
+      const updatedUser = { ...user, onboardingCompletedSteps: newCompleted };
+      setUser(updatedUser);
+      await updateDoc(doc(db, 'users', user.uid), { onboardingCompletedSteps: newCompleted });
+      toast.success('Progresso de onboarding atualizado!');
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao atualizar progresso de onboarding');
+    }
+  };
+
+  const handleUpdateMentorName = async (name: string) => {
+    if (!user) return;
+    try {
+      const updatedUser = { ...user, mentorName: name };
+      setUser(updatedUser);
+      await updateDoc(doc(db, 'users', user.uid), { mentorName: name });
+      toast.success('Padrinho/Madrinha atualizado!');
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao atualizar Padrinho/Madrinha');
     }
   };
 
@@ -1747,7 +1849,7 @@ export default function App() {
       setIsManagingEvents(false);
       setSelectedEvent(null);
       setIsCreatingEvent(false);
-      setEventForm({ title: '', description: '', startDate: '', endDate: '', time: '', location: '', type: 'Local', imageUrl: '', coordinatorId: '', isHistorical: false, academicYear: '' });
+      setEventForm({ title: '', description: '', startDate: '', endDate: '', time: '', startTime: '', endTime: '', location: '', type: 'Local', types: [], imageUrl: '', coordinatorId: '', isHistorical: false, academicYear: '' });
     } catch (error) {
       toast.error('Erro ao gerir evento');
     } finally {
@@ -2455,10 +2557,54 @@ export default function App() {
     </div>
   );
 
-  const renderProfile = () => (
-    <div className="space-y-8 pb-10">
-      {/* Header Section */}
-      <div className="flex flex-col items-center space-y-4 pt-4">
+  const renderProfile = () => {
+    const onboarding = getOnboardingProgress(user);
+    return (
+      <div className="space-y-8 pb-10">
+        {/* Onboarding Progress Card */}
+        <Card className="border-none bg-gradient-to-r from-red-50 to-orange-50/50 shadow-sm rounded-[2rem] overflow-hidden">
+          <CardContent className="p-6 sm:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div className="space-y-2 text-left flex-1">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 bg-red-100 text-red-600 rounded-lg text-xs font-black uppercase tracking-wider">Onboarding BEST Almada</span>
+                {onboarding.percent === 100 && (
+                  <Badge className="bg-green-100 text-green-700 hover:bg-green-200 border-none font-black text-[9px] uppercase">Concluído! 🎓</Badge>
+                )}
+              </div>
+              <h3 className="text-xl font-black text-zinc-950 uppercase tracking-tight">O teu Progresso de Integração</h3>
+              <p className="text-sm text-zinc-600 font-medium">
+                {onboarding.percent === 100 
+                  ? 'Parabéns! Completaste todos os objetivos de onboarding e és oficialmente um membro ativo! 🎉' 
+                  : `Completaste ${onboarding.completedCount} de ${onboarding.totalCount} objetivos necessários. Configura o teu perfil e conclui os restantes passos.`}
+              </p>
+              
+              {/* Progress bar */}
+              <div className="space-y-1.5 pt-2">
+                <div className="flex justify-between text-xs font-bold text-zinc-500">
+                  <span>Conclusão</span>
+                  <span>{onboarding.percent}%</span>
+                </div>
+                <div className="w-full bg-zinc-200/60 rounded-full h-3 overflow-hidden">
+                  <div 
+                    className="bg-gradient-to-r from-red-600 to-orange-500 h-full rounded-full transition-all duration-500" 
+                    style={{ width: `${onboarding.percent}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <Button 
+              size="sm" 
+              className="bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl px-4 py-5 shadow-md shadow-red-100 uppercase text-xs tracking-wider shrink-0"
+              onClick={() => setActiveTab('onboarding')}
+            >
+              Ver Objetivos <ChevronRight className="ml-1 h-4 w-4" />
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Header Section */}
+        <div className="flex flex-col items-center space-y-4 pt-4">
         <div className="relative group">
           <Avatar className="h-32 w-32 border-4 border-white shadow-2xl overflow-hidden transition-transform group-hover:scale-105 duration-300">
             <AvatarImage src={user.photoURL} />
@@ -2787,6 +2933,183 @@ export default function App() {
       </div>
     </div>
   );
+};
+
+  const renderOnboarding = () => {
+    if (!user) return null;
+    const progress = getOnboardingProgress(user);
+    
+    // Check auto steps
+    const isProfileConfigured = !!(user.photoURL && user.bio && user.course && user.phoneNumber);
+    const isTeamConfigured = !!user.teamId;
+
+    return (
+      <div className="space-y-8 pb-20">
+        <div className="space-y-1 text-left">
+          <h2 className="text-2xl font-black text-red-900 uppercase tracking-tight flex items-center gap-2">
+            <Rocket className="h-6 w-6 text-red-600 animate-bounce" /> Portal de Onboarding BEST Almada
+          </h2>
+          <p className="text-sm text-zinc-500 font-medium">Os teus primeiros passos para te integrares com sucesso e te tornares Full Member!</p>
+        </div>
+
+        {/* Dynamic Progress Card */}
+        <Card className="border-none bg-gradient-to-r from-red-500 to-orange-500 text-white shadow-xl rounded-[2.5rem] overflow-hidden">
+          <CardContent className="p-8 sm:p-10 flex flex-col md:flex-row items-center justify-between gap-8">
+            <div className="space-y-3 text-left flex-1 w-full">
+              <span className="px-3 py-1 bg-white/20 rounded-full text-[10px] font-black uppercase tracking-widest">O teu Progresso</span>
+              <h3 className="text-3xl font-black uppercase tracking-tight">Onboarding {progress.percent}%</h3>
+              <p className="text-sm font-medium opacity-95 leading-relaxed max-w-xl">
+                {progress.percent === 100 
+                  ? "Parabéns! Completaste todos os objetivos de onboarding do LBG Almada. Estás pronto para as maiores aventuras do BEST! 🎓🎉" 
+                  : "Completa todos os passos abaixo para garantires que tens tudo configurado para a tua jornada no BEST Almada."}
+              </p>
+              
+              {/* Progress Line */}
+              <div className="w-full bg-white/20 rounded-full h-3 overflow-hidden mt-4">
+                <div 
+                  className="bg-white h-full rounded-full transition-all duration-500" 
+                  style={{ width: `${progress.percent}%` }}
+                />
+              </div>
+            </div>
+            
+            <div className="shrink-0 flex flex-col items-center bg-white/10 p-6 rounded-[2rem] backdrop-blur-md border border-white/10 min-w-[150px]">
+              <span className="text-4xl font-black leading-none">{progress.completedCount} / {progress.totalCount}</span>
+              <span className="text-[10px] font-black uppercase tracking-widest opacity-80 mt-2">Objetivos</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Goals List */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-4">
+            <h3 className="text-sm font-black text-zinc-400 uppercase tracking-wider border-l-2 border-red-600 pl-3 text-left">Lista de Objetivos</h3>
+            
+            <div className="space-y-3">
+              {ONBOARDING_STEPS.map(step => {
+                let isCompleted = false;
+                if (step.id === 'profile') isCompleted = isProfileConfigured;
+                else if (step.id === 'team') isCompleted = isTeamConfigured;
+                else isCompleted = !!user.onboardingCompletedSteps?.includes(step.id);
+
+                return (
+                  <Card key={step.id} className={cn("border-none shadow-sm rounded-3xl overflow-hidden transition-all", isCompleted ? "bg-green-50/40" : "bg-white hover:shadow-md")}>
+                    <CardContent className="p-5 flex items-start gap-4">
+                      <div className="pt-0.5 shrink-0">
+                        {step.auto ? (
+                          isCompleted ? (
+                            <div className="h-6 w-6 rounded-full bg-green-500 flex items-center justify-center text-white">
+                              <Check className="h-4 w-4 stroke-[3]" />
+                            </div>
+                          ) : (
+                            <div className="h-6 w-6 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-400 cursor-not-allowed" title="Concluído automaticamente">
+                              <Sparkles className="h-3 w-3" />
+                            </div>
+                          )
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleToggleOnboardingStep(step.id)}
+                            className={cn(
+                              "h-6 w-6 rounded-lg border-2 flex items-center justify-center transition-all",
+                              isCompleted 
+                                ? "bg-green-500 border-green-500 text-white" 
+                                : "border-zinc-200 hover:border-red-400 hover:bg-red-50/20"
+                            )}
+                          >
+                            {isCompleted && <Check className="h-4 w-4 stroke-[3]" />}
+                          </button>
+                        )}
+                      </div>
+                      
+                      <div className="flex-1 min-w-0 text-left space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className={cn("font-bold text-sm", isCompleted ? "text-green-800 line-through opacity-80" : "text-zinc-900")}>
+                            {step.label}
+                          </h4>
+                          {step.auto && (
+                            <Badge variant="outline" className={cn("text-[8px] font-black uppercase tracking-widest border-dashed shrink-0", isCompleted ? "border-green-200 text-green-700 bg-green-100/30" : "border-zinc-200 text-zinc-400 bg-zinc-50")}>
+                              Automático
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-zinc-500 leading-relaxed font-medium">{step.description}</p>
+                        
+                        {step.id === 'profile' && !isCompleted && (
+                          <div className="pt-2">
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="h-8 rounded-xl text-[10px] font-bold border-red-200 text-red-600 hover:bg-red-50"
+                              onClick={() => setActiveTab('profile')}
+                            >
+                              Configurar Perfil <Edit2 className="ml-1 h-3 w-3" />
+                            </Button>
+                          </div>
+                        )}
+
+                        {step.id === 'team' && !isCompleted && (
+                          <div className="pt-2">
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="h-8 rounded-xl text-[10px] font-bold border-red-200 text-red-600 hover:bg-red-50"
+                              onClick={() => setActiveTab('teams')}
+                            >
+                              Ver Equipas <Users className="ml-1 h-3 w-3" />
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="space-y-6 text-left">
+            <h3 className="text-sm font-black text-zinc-400 uppercase tracking-wider border-l-2 border-red-600 pl-3">Contactos & Links Úteis</h3>
+            
+            <Card className="border-none bg-white shadow-sm rounded-3xl p-6 space-y-4">
+              <div className="space-y-1">
+                <h4 className="text-xs font-black uppercase tracking-widest text-red-600">FCT / LBG Almada</h4>
+                <p className="text-sm font-bold text-zinc-900">Associação Local BEST Almada</p>
+                <p className="text-xs text-zinc-500 font-medium leading-relaxed">
+                  Tendo acesso ao grupo de "Onde está o BEST?" tens sempre como saber onde estamos e vir conhecer-nos melhor! Aproveita e traz um amigo para te acompanhar.
+                </p>
+              </div>
+
+              <div className="space-y-3 pt-3 border-t border-zinc-100">
+                <a 
+                  href="https://best.eu.org" 
+                  target="_blank" 
+                  rel="noreferrer" 
+                  className="flex items-center justify-between p-3 rounded-2xl bg-zinc-50 hover:bg-zinc-100/80 transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="h-8 w-8 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">
+                      <Globe className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-zinc-900 group-hover:text-blue-600 transition-colors">Site Internacional</p>
+                      <p className="text-[9px] text-zinc-400 font-medium">best.eu.org</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-zinc-400 group-hover:translate-x-0.5 transition-all" />
+                </a>
+
+                <div className="p-3 rounded-2xl bg-zinc-50">
+                  <p className="text-[10px] font-black uppercase text-zinc-400 tracking-wider">Dúvidas? Fala connosco!</p>
+                  <p className="text-xs text-zinc-600 font-medium mt-1">Se precisares de ajuda com o teu processo de integração, fala com o Responsável de Recursos Humanos (HR) ou com os mentores da tua família.</p>
+                </div>
+              </div>
+            </Card>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const renderTeams = () => {
     if (selectedTeamView) {
@@ -6680,7 +7003,15 @@ export default function App() {
                     </div>
                   )}
                   <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/80 to-transparent">
-                    <Badge className="mb-2 bg-red-600 border-none">{selectedEventDetails.type}</Badge>
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {selectedEventDetails.types && selectedEventDetails.types.length > 0 ? (
+                        selectedEventDetails.types.map(t => (
+                          <Badge key={t} className="bg-red-600 border-none">{t}</Badge>
+                        ))
+                      ) : (
+                        <Badge className="bg-red-600 border-none">{selectedEventDetails.type}</Badge>
+                      )}
+                    </div>
                     <h2 className="text-2xl font-bold text-white">{selectedEventDetails.title}</h2>
                   </div>
                 </div>
@@ -6697,7 +7028,11 @@ export default function App() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Clock className="h-4 w-4 text-red-600" />
-                      <span className="font-bold text-zinc-900">{selectedEventDetails.time}</span>
+                      <span className="font-bold text-zinc-900">
+                        {selectedEventDetails.startTime && selectedEventDetails.endTime 
+                          ? `${selectedEventDetails.startTime} - ${selectedEventDetails.endTime}`
+                          : selectedEventDetails.time}
+                      </span>
                     </div>
                     <div className="flex items-center gap-2">
                       <MapPin className="h-4 w-4 text-red-600" />
@@ -6843,19 +7178,22 @@ Eventos inteiramente dedicados ao desenvolvimento de soft skills, com formadores
 
 Bem-vindo ao LBG Almada! Estamos super entusiasmados por te ter connosco. Os teus primeiros dias vão ser repletos de descobertas e aprendizagens. Aqui tens o roteiro básico para dares os teus primeiros passos de forma bem-sucedida:
 
-#### Passo 1: O teu Padrinho/Madrinha 👥
-No LBG Almada tens o nosso programa de mentoria! Será atribuído um padrinho ou madrinha que te acompanhará no teu percurso inicial, apresentará o grupo, tirará as tuas dúvidas e garantirá que te integras facilmente.
+#### Passo 1: Entrar numa Família 👥
+No LBG Almada temos o nosso programa de Famílias! Junta-te a uma família para conviveres, conheceres melhor toda a gente, partilhares histórias e participares nos nossos divertidos desafios e jantares de grupo.
 
-#### Passo 2: Explora os Departamentos 🔍
-Fala com os responsáveis (VPs) de cada departamento (FR, HR, PR, IT, Design) e assiste às suas reuniões gerais. Descobre as tarefas que mais te entusiasmam e desafia-te a experimentar novas áreas de interesse.
+#### Passo 2: Acesso ao WhatsApp Geral & Discord 💬
+Entra no grupo oficial de WhatsApp Geral e no nosso servidor do Discord para estares a par de todas as novidades, discussões informais, memes e chamadas de voz.
 
-#### Passo 3: Cria a tua Conta e Acessos 🌐
-*   Solicita os teus acessos para o Slack/Discord institucional.
-*   Cria a tua conta no Portal Internacional do BEST (best.eu.org) utilizando o teu e-mail institucional.
-*   Garante que tens acesso às ferramentas locais do LBG Almada no Google Drive.
+#### Passo 3: Participar de um Moodie 🌟
+Os Moodies são as nossas atividades sociais espontâneas e divertidas (ir tomar um café, dar um mergulho na praia, jogar jogos de tabuleiro ou jogos de computador). Participa num para te descontraíres e criares laços fortes com o grupo!
 
-#### Passo 4: Participa nas Reuniões Locais 🔴
-As reuniões gerais e Assembleias Gerais são o coração do LBG Almada. Participa ativamente, partilha as tuas ideias e acompanha as decisões importantes do grupo!`,
+#### Passo 4: Participar de uma Reunião Geral 🔴
+Assiste e participa numa Reunião Geral do LBG Almada. É o momento perfeito para veres como tomamos decisões locais e acompanhares o desenvolvimento do grupo.
+
+#### Passo 5: Explora as Equipas e Departamentos 🔍
+Liga-te a um dos nossos departamentos (FR, HR, PR, IT, Design) ou equipas locais para começares a colaborar e a trabalhar nos teus primeiros projetos práticos!
+
+*Nota: O acesso ao Site Internacional do BEST (best.eu.org) ser-te-á atribuído assim que completares todo o teu processo de onboarding!*`,
 
     'internal_faq': `### FAQ Interna - Perguntas Frequentes ❓🔴
 
@@ -6982,6 +7320,7 @@ A Board do LBG Almada passa certificados formais de cargos, coordenações de pr
       case 'events': return renderEvents();
       case 'families': return renderFamilies();
       case 'help': return renderHelp();
+      case 'onboarding': return renderOnboarding();
       case 'wellness': return <WellnessForms />;
       case 'announcements_archive': return renderAnnouncementsArchive();
       case 'glossary': return renderGlossary();
@@ -6997,7 +7336,6 @@ A Board do LBG Almada passa certificados formais de cargos, coordenações de pr
       'recognition': { title: 'Reconhecimento', icon: Trophy, desc: 'O impacto de ser membro do BEST.' },
       'skills_dev': { title: 'Desenvolvimento', icon: Target, desc: 'As competências que podes adquirir.' },
       'international': { title: 'Oportunidades Internacionais', icon: Globe, desc: 'Courses, events, trainings e exchanges pela Europa.' },
-      'onboarding': { title: 'Guia de Onboarding', icon: Rocket, desc: 'Os teus primeiros passos no BEST.' },
       'internal_faq': { title: 'FAQ Interna', icon: HelpCircle, desc: 'Dúvidas frequentes sobre o LBG.' }
     };
 
@@ -7174,8 +7512,11 @@ A Board do LBG Almada passa certificados formais de cargos, coordenações de pr
                       startDate: `${selectedHistoryYear}-01-01`,
                       endDate: `${selectedHistoryYear}-01-01`,
                       time: '',
+                      startTime: '',
+                      endTime: '',
                       location: '',
                       type: 'Local' as any,
+                      types: [],
                       imageUrl: '',
                       isHistorical: true,
                       coordinatorId: '',
@@ -7219,8 +7560,11 @@ A Board do LBG Almada passa certificados formais de cargos, coordenações de pr
                             startDate: ev.startDate || '',
                             endDate: ev.endDate || '',
                             time: ev.time || '',
+                            startTime: ev.startTime || '',
+                            endTime: ev.endTime || '',
                             location: ev.location || '',
-                            type: ev.type,
+                            type: ev.type || 'Local',
+                            types: ev.types || (ev.type ? [ev.type] : []),
                             imageUrl: ev.imageUrl || '',
                             isHistorical: ev.isHistorical || false,
                             coordinatorId: ev.coordinatorId || '',
@@ -8434,14 +8778,28 @@ A Board do LBG Almada passa certificados formais de cargos, coordenações de pr
                  </div>
                )}
                <div className={cn("p-8 text-white relative", !selectedEventDetails.imageUrl && "bg-gradient-to-br from-red-600 to-red-900")}>
-                  <div className="flex justify-between items-start mb-4">
-                    <Badge className="bg-white/20 hover:bg-white/30 text-white border-none text-[10px] font-black uppercase tracking-widest px-3 py-1">
-                      {selectedEventDetails.category}
-                    </Badge>
+                  <div className="flex flex-wrap gap-1.5 mb-4">
+                    {selectedEventDetails.types && selectedEventDetails.types.length > 0 ? (
+                      selectedEventDetails.types.map(t => (
+                        <Badge key={t} className="bg-white/20 hover:bg-white/30 text-white border-none text-[10px] font-black uppercase tracking-widest px-3 py-1">
+                          {t}
+                        </Badge>
+                      ))
+                    ) : (
+                      <Badge className="bg-white/20 hover:bg-white/30 text-white border-none text-[10px] font-black uppercase tracking-widest px-3 py-1">
+                        {selectedEventDetails.type || 'Local'}
+                      </Badge>
+                    )}
                   </div>
                   <h3 className="text-3xl font-black uppercase tracking-tight">{selectedEventDetails.title}</h3>
-                  <div className="flex items-center gap-4 mt-4 text-xs font-bold opacity-80">
+                  <div className="flex flex-wrap items-center gap-4 mt-4 text-xs font-bold opacity-80">
                     <div className="flex items-center gap-1.5"><Calendar className="h-4 w-4" /> {new Date(selectedEventDetails.startDate).toLocaleDateString()}</div>
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="h-4 w-4" /> 
+                      {selectedEventDetails.startTime && selectedEventDetails.endTime 
+                        ? `${selectedEventDetails.startTime} - ${selectedEventDetails.endTime}`
+                        : selectedEventDetails.time || '18:30'}
+                    </div>
                     <div className="flex items-center gap-1.5"><MapPin className="h-4 w-4" /> {selectedEventDetails.location}</div>
                   </div>
                   {selectedEventDetails.coordinatorId && selectedEventDetails.coordinatorId !== 'none' && (
@@ -8684,9 +9042,12 @@ A Board do LBG Almada passa certificados formais de cargos, coordenações de pr
                       description: ev.description,
                       startDate: ev.startDate || '',
                       endDate: ev.endDate || '',
-                      time: ev.time,
-                      location: ev.location,
-                      type: ev.type,
+                      time: ev.time || '',
+                      startTime: ev.startTime || '',
+                      endTime: ev.endTime || '',
+                      location: ev.location || '',
+                      type: ev.type || 'Local',
+                      types: ev.types || (ev.type ? [ev.type] : []),
                       imageUrl: ev.imageUrl || '',
                       isHistorical: ev.isHistorical || false,
                       coordinatorId: ev.coordinatorId || '',
@@ -8709,8 +9070,11 @@ A Board do LBG Almada passa certificados formais de cargos, coordenações de pr
                     startDate: '', 
                     endDate: '', 
                     time: '', 
+                    startTime: '',
+                    endTime: '',
                     location: '', 
                     type: 'Local', 
+                    types: [],
                     imageUrl: '', 
                     isHistorical: false, 
                     coordinatorId: '',
@@ -8760,40 +9124,77 @@ A Board do LBG Almada passa certificados formais de cargos, coordenações de pr
                     <Textarea className="rounded-t-none rounded-b-xl border-zinc-200 focus:ring-blue-500 min-h-[80px]" placeholder="Descrição do evento" value={eventForm.description} onChange={e => setEventForm({...eventForm, description: e.target.value})} />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Início</Label>
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Data de Início</Label>
                     <Input className="rounded-xl border-zinc-200 focus:ring-blue-500" type="date" value={eventForm.startDate} onChange={e => setEventForm({...eventForm, startDate: e.target.value})} />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Fim</Label>
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Data de Fim</Label>
                     <Input className="rounded-xl border-zinc-200 focus:ring-blue-500" type="date" value={eventForm.endDate} onChange={e => setEventForm({...eventForm, endDate: e.target.value})} />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Hora</Label>
-                    <Input className="rounded-xl border-zinc-200 focus:ring-blue-500" placeholder="18:30" value={eventForm.time} onChange={e => setEventForm({...eventForm, time: e.target.value})} />
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Hora de Início (opcional)</Label>
+                    <Input className="rounded-xl border-zinc-200 focus:ring-blue-500" type="time" value={eventForm.startTime} onChange={e => {
+                      const st = e.target.value;
+                      const fallbackTime = eventForm.endTime ? `${st} - ${eventForm.endTime}` : st;
+                      setEventForm({...eventForm, startTime: st, time: fallbackTime});
+                    }} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Hora de Fim (opcional)</Label>
+                    <Input className="rounded-xl border-zinc-200 focus:ring-blue-500" type="time" value={eventForm.endTime} onChange={e => {
+                      const et = e.target.value;
+                      const fallbackTime = eventForm.startTime ? `${eventForm.startTime} - ${et}` : et;
+                      setEventForm({...eventForm, endTime: et, time: fallbackTime});
+                    }} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Hora Geral (texto)</Label>
+                    <Input className="rounded-xl border-zinc-200 focus:ring-blue-500" placeholder="Ex: 18:30" value={eventForm.time} onChange={e => setEventForm({...eventForm, time: e.target.value})} />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Local</Label>
                     <Input className="rounded-xl border-zinc-200 focus:ring-blue-500" placeholder="Auditório 1" value={eventForm.location} onChange={e => setEventForm({...eventForm, location: e.target.value})} />
                   </div>
+                  
                   <div className="col-span-1 sm:col-span-2 space-y-2">
-                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Tipo e Estado</Label>
-                    <div className="grid grid-cols-[1fr,auto] gap-2">
-                      <Select value={eventForm.type} onValueChange={v => setEventForm({...eventForm, type: v as any})}>
-                        <SelectTrigger className="rounded-xl border-zinc-200"><SelectValue /></SelectTrigger>
-                        <SelectContent className="rounded-2xl">
-                          <SelectItem value="Local">Local</SelectItem>
-                          <SelectItem value="International">Internacional</SelectItem>
-                          <SelectItem value="Social">Social</SelectItem>
-                          <SelectItem value="Training">Training</SelectItem>
-                        </SelectContent>
-                      </Select>
+                    <div className="flex justify-between items-center">
+                      <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Tipos de Evento (Podes escolher vários)</Label>
                       <Button 
+                        type="button"
                         variant={eventForm.isHistorical ? "secondary" : "outline"}
-                        className={cn("h-10 px-4 rounded-xl font-bold text-[9px] uppercase", eventForm.isHistorical && "bg-amber-100 text-amber-700 hover:bg-amber-200")}
+                        className={cn("h-7 px-3 rounded-lg font-bold text-[9px] uppercase", eventForm.isHistorical && "bg-amber-100 text-amber-700 hover:bg-amber-200")}
                         onClick={() => setEventForm({...eventForm, isHistorical: !eventForm.isHistorical})}
                       >
                         Arquivo Histórico
                       </Button>
+                    </div>
+                    <div className="flex flex-wrap gap-2.5 p-3.5 bg-zinc-50 rounded-2xl border border-zinc-100/80">
+                      {['Local', 'International', 'Social', 'Training', 'Outro'].map((t) => {
+                        const isChecked = eventForm.types?.includes(t) || eventForm.type === t;
+                        return (
+                          <label key={t} className="flex items-center gap-2 cursor-pointer bg-white px-3 py-1.5 rounded-xl border border-zinc-200/60 shadow-xs hover:border-red-200 hover:bg-red-50/10 select-none">
+                            <Checkbox 
+                              checked={isChecked} 
+                              onCheckedChange={(checked) => {
+                                let newTypes = [...(eventForm.types || [])];
+                                if (checked) {
+                                  if (!newTypes.includes(t)) {
+                                    newTypes.push(t);
+                                  }
+                                } else {
+                                  newTypes = newTypes.filter(x => x !== t);
+                                }
+                                setEventForm({
+                                  ...eventForm,
+                                  types: newTypes,
+                                  type: newTypes[0] || 'Local'
+                                });
+                              }}
+                            />
+                            <span className="text-xs font-bold text-zinc-700">{t}</span>
+                          </label>
+                        );
+                      })}
                     </div>
                   </div>
                   <div className="col-span-1 sm:col-span-2 space-y-2">

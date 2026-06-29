@@ -31,6 +31,8 @@ export interface UserProfile {
     content: string;
     date: string;
   }[];
+  onboardingCompletedSteps?: string[];
+  mentorName?: string;
 }
 
 export interface Gadget {
@@ -84,10 +86,13 @@ export interface BESTEvent {
   description: string;
   startDate: string; // YYYY-MM-DD
   endDate: string;   // YYYY-MM-DD
-  time: string;
+  time: string;      // Legacy / display time
+  startTime?: string; // HH:MM
+  endTime?: string;   // HH:MM
   location: string;
-  type: 'Local' | 'International' | 'Social' | 'Training';
-  category?: 'Local' | 'International' | 'Social' | 'Training'; // Added for compatibility
+  type: string;       // Legacy single type
+  types?: string[];   // Multiple types (e.g., ['Social', 'Local'])
+  category?: string;  // Added for compatibility
   imageUrl?: string;
   isHistorical?: boolean;
   coordinatorId?: string;

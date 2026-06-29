@@ -352,7 +352,10 @@ export default function Layout({
                               icon={BookOpen} 
                               title="Guia de Onboarding" 
                               desc="Os teus primeiros passos no BEST."
-                              content={renderSidebarPage('onboarding', 'Guia de Onboarding', BookOpen, 'Os teus primeiros passos no BEST.')}
+                              onClick={() => {
+                                setActiveTab('onboarding');
+                                setIsSidebarOpen(false);
+                              }}
                             />
                             <MenuSection 
                               icon={HelpCircle} 

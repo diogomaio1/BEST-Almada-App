@@ -1,25 +1,25 @@
 import "dotenv/config";
 import express from "express";
 import path from "path";
-import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
-import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, getDocs, addDoc, query, where, serverTimestamp } from 'firebase/firestore';
-import fs from 'fs';
+import admin from "firebase-admin";
+import { getFirestore } from "firebase-admin/firestore";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
+import fs from "fs";
 import { GoogleGenAI } from "@google/genai";
 
 // Print available process environment keys for diagnostics
 console.log("[ENV DIAGNOSTIC] Available environment keys:", Object.keys(process.env).filter(k => k.includes("SUPABASE") || k.includes("URL") || k.includes("KEY") || k.includes("GEMINI")));
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 // Load Firebase Config
-const firebaseConfig = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'firebase-applet-config.json'), 'utf-8'));
+const firebaseConfig = JSON.parse(fs.readFileSync(path.join(process.cwd(), "firebase-applet-config.json"), "utf-8"));
 
-// Initialize Firebase (using client SDK on server for simplicity if Admin SDK creds aren't available)
-const firebaseApp = initializeApp(firebaseConfig);
-const db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+// Initialize Firebase Admin (bypasses security rules securely on the server side)
+const adminApp = admin.initializeApp({
+  projectId: firebaseConfig.projectId,
+});
+const db = getFirestore(adminApp, firebaseConfig.firestoreDatabaseId);
 
 // Lazy-initialized Gemini Client
 let genAIClient: GoogleGenAI | null = null;
@@ -46,6 +46,78 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Trust proxy to handle X-Forwarded-For headers securely behind Cloud Run / reverse proxies
+  app.set('trust proxy', 1);
+
+  // 1. HTTP Security Headers (Helmet) - configured specifically to be safe, secure, and compatible with AI Studio's iframe preview
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: [
+            "'self'",
+            "'unsafe-inline'", // Required for React/Vite in-page hydration/execution
+            "'unsafe-eval'",   // Required for Vite development bundling/HMR
+            "https://apis.google.com",
+            "https://*.googleapis.com"
+          ],
+          styleSrc: [
+            "'self'",
+            "'unsafe-inline'", // Required for Tailwind CSS / styling libraries
+            "https://fonts.googleapis.com"
+          ],
+          imgSrc: [
+            "'self'",
+            "data:",
+            "blob:",
+            "https://picsum.photos",
+            "https://*.picsum.photos",
+            "https://lh3.googleusercontent.com", // Google profile images
+            "https://images.unsplash.com"
+          ],
+          connectSrc: [
+            "'self'",
+            "https://*.supabase.co",
+            "https://*.supabase.in",
+            "https://*.googleapis.com",
+            "https://*.firebaseio.com",
+            "wss://*.firebaseio.com",
+            "https://identitytoolkit.googleapis.com",
+            "https://securetoken.googleapis.com"
+          ],
+          fontSrc: [
+            "'self'",
+            "https://fonts.gstatic.com"
+          ],
+          frameAncestors: ["*"], // MANDATORY: allows embedding inside the AI Studio iframe/preview safely
+          objectSrc: ["'none'"],
+          upgradeInsecureRequests: [],
+        },
+      },
+      frameguard: false, // MANDATORY: disables X-Frame-Options to prevent blocking the AI Studio iframe
+      crossOriginEmbedderPolicy: false,
+      crossOriginResourcePolicy: { policy: "cross-origin" }
+    })
+  );
+
+  // Disable powered-by header for extra security
+  app.disable("x-powered-by");
+
+  // 2. API Rate Limiting - protect endpoints from abuse, spam, or denial of service
+  const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 150, // Limit each IP to 150 requests per window
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+      error: "Muitos pedidos a partir deste IP. Por favor tente novamente após 15 minutos."
+    }
+  });
+
+  // Apply rate limiter to all API endpoints
+  app.use("/api/", apiLimiter);
+
   // Middleware to parse JSON request bodies
   app.use(express.json());
 
@@ -54,11 +126,32 @@ async function startServer() {
     res.json({ status: "ok" });
   });
 
+  // Generate Firebase Custom Token for authenticated Supabase user ID
+  app.post("/api/firebase-token", async (req, res) => {
+    const { userId } = req.body;
+    if (!userId || typeof userId !== "string") {
+      return res.status(400).json({ error: "O parâmetro 'userId' é obrigatório." });
+    }
+    try {
+      // Generate a custom token with the same user ID so their UID matches exactly
+      const customToken = await admin.auth().createCustomToken(userId);
+      res.json({ token: customToken });
+    } catch (err: any) {
+      console.error("[ERROR] Failed to generate Firebase custom token:", err);
+      res.status(500).json({ error: "Erro ao gerar token de autenticação complementar." });
+    }
+  });
+
   // Chatbot Assistant API endpoint
   app.post("/api/chatbot", async (req, res) => {
     const { message, history } = req.body;
-    if (!message) {
-      return res.status(400).json({ error: "Missing message field" });
+    
+    // 3. Robust input validation and sanitization (payload-size protection)
+    if (!message || typeof message !== "string" || message.trim().length === 0) {
+      return res.status(400).json({ error: "O campo 'message' é obrigatório e deve ser uma string de texto." });
+    }
+    if (message.length > 2000) {
+      return res.status(400).json({ error: "A mensagem é demasiado longa. Limite de 2000 caracteres." });
     }
 
     const ai = getGenAI();
@@ -169,7 +262,7 @@ Instruções de Resposta:
     console.log("[CRON] Checking for event reminders...");
     try {
       const now = new Date();
-      const eventsSnap = await getDocs(collection(db, 'events'));
+      const eventsSnap = await db.collection("events").get();
       
       for (const eventDoc of eventsSnap.docs) {
         const event = { id: eventDoc.id, ...eventDoc.data() } as any;
@@ -180,22 +273,22 @@ Instruções de Resposta:
         
         // Reminder logic
         const remindersToCreate = [];
-        if (diffDays === 7) remindersToCreate.push({ type: '7day', label: '1 semana' });
-        if (diffDays === 1) remindersToCreate.push({ type: '1day', label: '1 dia' });
-        if (diffDays === 0 && now.getDate() === eventDate.getDate()) remindersToCreate.push({ type: 'today', label: 'hoje' });
+        if (diffDays === 7) remindersToCreate.push({ type: "7day", label: "1 semana" });
+        if (diffDays === 1) remindersToCreate.push({ type: "1day", label: "1 dia" });
+        if (diffDays === 0 && now.getDate() === eventDate.getDate()) remindersToCreate.push({ type: "today", label: "hoje" });
 
         for (const rem of remindersToCreate) {
           const reminderId = `reminder_${event.id}_${rem.type}`;
           // Check if already sent
-          const existingSnap = await getDocs(query(collection(db, 'notifications'), where('resourceId', '==', reminderId)));
+          const existingSnap = await db.collection("notifications").where("resourceId", "==", reminderId).get();
           
           if (existingSnap.empty) {
-            await addDoc(collection(db, 'notifications'), {
+            await db.collection("notifications").add({
               title: `Lembrete: ${event.title}`,
               message: `O evento "${event.title}" começa em ${rem.label}!`,
-              type: 'reminder',
+              type: "reminder",
               resourceId: reminderId,
-              createdAt: serverTimestamp(),
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
               isRead: false,
               link: `/events/${event.id}`
             });
