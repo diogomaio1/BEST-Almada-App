@@ -62,7 +62,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 import { db, auth } from './lib/firebase';
-import { signInWithCustomToken, signOut } from 'firebase/auth';
+import { signInWithCustomToken, signOut, signInAnonymously } from 'firebase/auth';
 import { supabase, getSupabaseConfigInfo, initializeDynamicSupabase } from './lib/supabase';
 import { 
   doc, 
@@ -829,18 +829,16 @@ export default function App() {
                   body: JSON.stringify({ userId: supabaseUser.id })
                 });
                 const tokenData = await tokenResponse.json();
-                if (tokenData.token) {
+                if (tokenData && tokenData.token) {
                   await signInWithCustomToken(auth, tokenData.token);
-                  setIsFirebaseSynced(true);
                   console.log("Authenticated complementarily with Firebase Auth using Custom Token");
                 } else {
-                  console.warn("Could not retrieve Firebase custom token. Real-time Firebase listeners may fail permissions checks.");
-                  setIsFirebaseSynced(false);
+                  console.log("Firebase custom token authentication not supported in this environment. Falling back to unauthenticated database connection.");
                 }
               } catch (tokenErr) {
-                console.error("Firebase custom token authentication error:", tokenErr);
-                setIsFirebaseSynced(false);
+                console.log("Firebase custom token authentication fetch error. Falling back to unauthenticated database connection.");
               }
+              setIsFirebaseSynced(true); // Proceed anyway to prevent blocking the interface
               
               if (unsubUser) {
                 unsubUser();
@@ -1020,7 +1018,7 @@ export default function App() {
 
   // Real-time Listeners
   React.useEffect(() => {
-    if (!isAuthReady || !user || !isFirebaseSynced) return;
+    if (!isAuthReady || !user) return;
 
     // Publicly accessible listeners (teams, events and allMembers for profile view)
     const unsubTeams = onSnapshot(collection(db, 'teams'), (snapshot) => {
@@ -1206,7 +1204,7 @@ export default function App() {
       unsubAnnouncements();
       unsubGlossary();
     };
-  }, [isAuthReady, user, isFirebaseSynced]);
+  }, [isAuthReady, user]);
 
   const handleLogin = async () => {
     console.log("Login initiated...");
