@@ -176,34 +176,33 @@ const compressImageFile = (file: File): Promise<string> => {
 const LoginLogo: React.FC = () => {
   const [logoIndex, setLogoIndex] = React.useState(0);
   const fallbacks = [
-    "https://upload.wikimedia.org/wikipedia/commons/4/41/BEST_logo.svg",
-    "https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/BEST_logo.svg/500px-BEST_logo.svg.png",
-    "https://upload.wikimedia.org/wikipedia/commons/e/e4/BEST_logo.png",
+    "/BEST_logo.png",
+    "/BEST_logo.svg",
     "https://upload.wikimedia.org/wikipedia/commons/5/50/BESTlogo.png"
   ];
 
   if (logoIndex >= fallbacks.length) {
     return (
-      <div className="w-full h-full flex flex-col items-center justify-center bg-red-500 rounded-3xl p-5 shadow-inner">
+      <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-red-500 via-red-600 to-red-800 rounded-3xl p-5 shadow-inner relative overflow-hidden">
         {/* Precision drawn vector representation of the official BEST propeller symbol */}
-        <svg viewBox="0 0 100 100" className="w-[85%] h-[85%] text-white fill-current animate-[pulse_3s_infinite]" id="best-inline-logo">
+        <svg viewBox="0 0 100 100" className="w-[85%] h-[85%] text-white fill-current animate-[pulse_4s_infinite]" id="best-inline-logo">
           {/* Central circular core */}
-          <circle cx="50" cy="50" r="8" className="fill-white" />
+          <circle cx="50" cy="50" r="7" className="fill-white" />
+          
+          {/* The Three Spokes connecting Center to the Triangle Corners */}
+          <line x1="50" y1="50" x2="50" y2="35" stroke="white" strokeWidth="4.5" strokeLinecap="round" />
+          <line x1="50" y1="50" x2="63" y2="57.5" stroke="white" strokeWidth="4.5" strokeLinecap="round" />
+          <line x1="50" y1="50" x2="37" y2="57.5" stroke="white" strokeWidth="4.5" strokeLinecap="round" />
           
           {/* Central rounded triangular ring surrounding the core */}
-          <path d="M 50 35 A 15 15 0 0 1 63 57 A 15 15 0 0 1 37 57 A 15 15 0 0 1 50 35 Z" fill="none" stroke="white" strokeWidth="4.5" strokeLinejoin="round" />
+          <path d="M 50 35 A 15 15 0 0 1 63 57.5 A 15 15 0 0 1 37 57.5 A 15 15 0 0 1 50 35 Z" fill="none" stroke="white" strokeWidth="4.5" strokeLinejoin="round" strokeLinecap="round" />
           
-          {/* Three elegantly handcrafted curved propellor/pinwheel wing blades radiating out at 120-degree intervals */}
-          {/* Top-Right Blade */}
-          <path d="M 50 35 C 50 20, 60 10, 80 15 C 70 30, 65 40, 63 57 C 58 45, 54 38, 50 35 Z" className="fill-white" />
-          
-          {/* Bottom-Right/Downward Blade */}
-          <path d="M 63 57 C 75 65, 78 78, 65 92 C 55 80, 48 70, 37 57 C 49 57, 56 57, 63 57 Z" className="fill-white" />
-          
-          {/* Left/Top-Left Blade */}
-          <path d="M 37 57 C 22 55, 12 42, 10 21 C 25 30, 38 35, 50 35 C 43 45, 40 50, 37 57 Z" className="fill-white" />
+          {/* Three elegantly rotated propeller wing blades radiating out at 120-degree intervals for mathematical perfection */}
+          <path d="M 37 57.5 C 22 55, 12 42, 10 21 C 25 30, 38 35, 50 35 C 43 45, 40 50, 37 57.5 Z" className="fill-white" />
+          <path d="M 37 57.5 C 22 55, 12 42, 10 21 C 25 30, 38 35, 50 35 C 43 45, 40 50, 37 57.5 Z" className="fill-white" transform="rotate(120, 50, 50)" />
+          <path d="M 37 57.5 C 22 55, 12 42, 10 21 C 25 30, 38 35, 50 35 C 43 45, 40 50, 37 57.5 Z" className="fill-white" transform="rotate(240, 50, 50)" />
         </svg>
-        <span className="text-[11px] text-white/90 font-black uppercase tracking-widest mt-2" id="best-almada-label">BEST Almada</span>
+        <span className="text-[11px] text-white/95 font-black uppercase tracking-widest mt-2 relative z-10" id="best-almada-label">BEST Almada</span>
       </div>
     );
   }
@@ -489,6 +488,7 @@ export default function App() {
   const [emailAuth, setEmailAuth] = React.useState('');
   const [passwordAuth, setPasswordAuth] = React.useState('');
   const [isSignUp, setIsSignUp] = React.useState(false);
+  const [showPrivacyDialog, setShowPrivacyDialog] = React.useState(false);
   const [serverConfigDiag, setServerConfigDiag] = React.useState<any>(null);
 
   React.useEffect(() => {
@@ -2330,6 +2330,27 @@ export default function App() {
                   <span>Só para membros verificados</span>
                   <div className="h-[1px] flex-1 bg-zinc-100" />
                 </div>
+                
+                {/* Security and Academic Trust Notice */}
+                <div className="rounded-2xl bg-zinc-50 border border-zinc-100 p-4 space-y-2.5 text-left">
+                  <div className="flex items-center gap-2 text-zinc-700">
+                    <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
+                    <p className="text-[10px] font-black uppercase tracking-wider text-zinc-800">Plataforma Académica Segura</p>
+                  </div>
+                  <p className="text-[10px] text-zinc-500 font-medium leading-normal">
+                    Este é um portal privado, sem fins lucrativos, gerido pelo <strong>LBG Almada (BEST)</strong> na FCT NOVA. Não guardamos senhas em texto limpo e não partilhamos dados com terceiros.
+                  </p>
+                  <div className="pt-1 border-t border-zinc-100 flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => setShowPrivacyDialog(true)}
+                      className="text-[9px] text-red-600 hover:underline font-bold transition-all uppercase tracking-wider cursor-pointer"
+                    >
+                      Política de Privacidade e Termos ⚖️
+                    </button>
+                    <span className="text-[8px] text-zinc-400 font-bold uppercase tracking-widest">SSL / TLS Ativo</span>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -2345,6 +2366,71 @@ export default function App() {
             <p className="text-[10px] text-zinc-400 font-bold tracking-tight">BEST Almada Hub v1.0</p>
           </div>
         </div>
+
+        {/* Dynamic Privacy Policy and Security Dialog */}
+        <Dialog open={showPrivacyDialog} onOpenChange={setShowPrivacyDialog}>
+          <DialogContent className="sm:max-w-[480px] rounded-[2.5rem] p-6 gap-6 max-h-[85vh] overflow-y-auto">
+            <DialogHeader className="text-left">
+              <DialogTitle className="text-xl font-black text-red-900 uppercase tracking-tight flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-red-600" />
+                <span>Termos e Privacidade - BEST Hub</span>
+              </DialogTitle>
+              <DialogDescription className="text-zinc-500 text-xs font-medium">
+                Última atualização: Julho de 2026. Transparência e segurança garantidas pelo LBG Almada.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 text-xs text-zinc-700 leading-relaxed text-left">
+              <div className="space-y-1.5">
+                <h4 className="font-bold text-zinc-950 uppercase tracking-wider text-[11px] flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-600" />
+                  1. Natureza do Serviço e Âmbito
+                </h4>
+                <p className="text-[11px] text-zinc-600 font-medium">
+                  O BEST Almada Hub é um sistema de informação interno, privado e sem fins comerciais, concebido exclusivamente para a gestão operacional das atividades e comunicação dos membros da associação de estudantes local <strong>LBG Almada - Board of European Students of Technology</strong>, sediada na FCT NOVA, Portugal.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <h4 className="font-bold text-zinc-950 uppercase tracking-wider text-[11px] flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-600" />
+                  2. Proteção de Dados e Palavras-passe
+                </h4>
+                <p className="text-[11px] text-zinc-600 font-medium">
+                  Todas as autenticações e sessões são encriptadas de ponta a ponta e processadas de forma segura e certificada através dos serviços de infraestrutura do <strong>Supabase</strong> e da <strong>Google Cloud Platform</strong>. As palavras-passe nunca são armazenadas em texto limpo, não sendo acessíveis por administradores nem por terceiros.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <h4 className="font-bold text-zinc-950 uppercase tracking-wider text-[11px] flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-600" />
+                  3. Transparência na Instalação (PWA)
+                </h4>
+                <p className="text-[11px] text-zinc-600 font-medium">
+                  Esta aplicação utiliza a tecnologia padrão da Web <strong>PWA (Progressive Web App)</strong>. A instalação do ícone no ecrã principal é 100% opcional, iniciada estritamente pelo utilizador a partir das opções nativas do seu próprio navegador (Safari, Chrome ou Edge). A aplicação não descarrega qualquer ficheiro executável (.exe, .apk, .dmg), vírus ou malware para o seu dispositivo.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <h4 className="font-bold text-zinc-950 uppercase tracking-wider text-[11px] flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-600" />
+                  4. Direitos dos Utilizadores
+                </h4>
+                <p className="text-[11px] text-zinc-600 font-medium">
+                  Todos os utilizadores têm o direito de consultar, alterar ou eliminar permanentemente os seus dados de perfil a qualquer momento a partir da secção de definições na plataforma, ou mediante contacto com a comissão administrativa do LBG Almada.
+                </p>
+              </div>
+            </div>
+
+            <Button 
+              onClick={() => setShowPrivacyDialog(false)}
+              className="w-full bg-red-600 hover:bg-red-700 font-black uppercase tracking-wider text-xs h-11 rounded-xl cursor-pointer"
+            >
+              Declaro que compreendi e aceito
+            </Button>
+          </DialogContent>
+        </Dialog>
+
         <Toaster position="top-center" />
       </div>
     );
