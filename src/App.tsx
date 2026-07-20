@@ -54,7 +54,11 @@ import {
   Lock as LockIcon,
   BadgeCheck,
   History as HistoryIcon,
-  Sparkles
+  Sparkles,
+  Instagram,
+  Linkedin,
+  Facebook,
+  Twitter
 } from 'lucide-react';
 import { Checkbox } from "@/components/ui/checkbox";
 import { Toaster } from '@/components/ui/sonner';
@@ -172,51 +176,29 @@ const compressImageFile = (file: File): Promise<string> => {
   });
 };
 
-// Login Logo with guaranteed fallbacks and inline vector backup
+// Login Logo rendering the official high-fidelity BEST Almada logo inline
 const LoginLogo: React.FC = () => {
-  const [logoIndex, setLogoIndex] = React.useState(0);
-  const fallbacks = [
-    "/BEST_logo.png",
-    "/BEST_logo.svg",
-    "https://upload.wikimedia.org/wikipedia/commons/5/50/BESTlogo.png"
-  ];
-
-  if (logoIndex >= fallbacks.length) {
-    return (
-      <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-red-500 via-red-600 to-red-800 rounded-3xl p-5 shadow-inner relative overflow-hidden">
-        {/* Precision drawn vector representation of the official BEST propeller symbol */}
-        <svg viewBox="0 0 100 100" className="w-[85%] h-[85%] text-white fill-current animate-[pulse_4s_infinite]" id="best-inline-logo">
-          {/* Central circular core */}
-          <circle cx="50" cy="50" r="7" className="fill-white" />
-          
-          {/* The Three Spokes connecting Center to the Triangle Corners */}
-          <line x1="50" y1="50" x2="50" y2="35" stroke="white" strokeWidth="4.5" strokeLinecap="round" />
-          <line x1="50" y1="50" x2="63" y2="57.5" stroke="white" strokeWidth="4.5" strokeLinecap="round" />
-          <line x1="50" y1="50" x2="37" y2="57.5" stroke="white" strokeWidth="4.5" strokeLinecap="round" />
-          
-          {/* Central rounded triangular ring surrounding the core */}
-          <path d="M 50 35 A 15 15 0 0 1 63 57.5 A 15 15 0 0 1 37 57.5 A 15 15 0 0 1 50 35 Z" fill="none" stroke="white" strokeWidth="4.5" strokeLinejoin="round" strokeLinecap="round" />
-          
-          {/* Three elegantly rotated propeller wing blades radiating out at 120-degree intervals for mathematical perfection */}
-          <path d="M 37 57.5 C 22 55, 12 42, 10 21 C 25 30, 38 35, 50 35 C 43 45, 40 50, 37 57.5 Z" className="fill-white" />
-          <path d="M 37 57.5 C 22 55, 12 42, 10 21 C 25 30, 38 35, 50 35 C 43 45, 40 50, 37 57.5 Z" className="fill-white" transform="rotate(120, 50, 50)" />
-          <path d="M 37 57.5 C 22 55, 12 42, 10 21 C 25 30, 38 35, 50 35 C 43 45, 40 50, 37 57.5 Z" className="fill-white" transform="rotate(240, 50, 50)" />
-        </svg>
-        <span className="text-[11px] text-white/95 font-black uppercase tracking-widest mt-2 relative z-10" id="best-almada-label">BEST Almada</span>
-      </div>
-    );
-  }
-
   return (
-    <img 
-      src={fallbacks[logoIndex]} 
-      onError={() => {
-        console.warn(`Logo failing to load: ${fallbacks[logoIndex]}. Attempting next source...`);
-        setLogoIndex(prev => prev + 1);
-      }}
-      alt="BEST Logo" 
-      className="w-full h-full object-contain img-fade-in transition-all duration-300"
-    />
+    <div className="w-full h-full flex items-center justify-center relative overflow-hidden bg-gradient-to-tr from-[#9e050f] via-[#e30613] to-[#ff2a38] p-6 select-none">
+      {/* Precision drawn vector representation of the official BEST propeller symbol */}
+      <svg viewBox="0 0 100 100" className="w-[90%] h-[90%] text-white fill-current drop-shadow-[0_4px_6px_rgba(0,0,0,0.15)]" id="best-inline-logo">
+        {/* Central circular core */}
+        <circle cx="50" cy="50" r="8" fill="white" />
+        
+        {/* Central rounded triangular ring surrounding the core */}
+        <path d="M 50 35 A 15 15 0 0 1 63 57 A 15 15 0 0 1 37 57 A 15 15 0 0 1 50 35 Z" fill="none" stroke="white" strokeWidth="4.5" strokeLinejoin="round" />
+        
+        {/* Three elegantly handcrafted curved propellor/pinwheel wing blades radiating out at 120-degree intervals */}
+        {/* Top-Right Blade */}
+        <path d="M 50 35 C 50 20, 60 10, 80 15 C 70 30, 65 40, 63 57 C 58 45, 54 38, 50 35 Z" fill="white" />
+        
+        {/* Bottom-Right/Downward Blade */}
+        <path d="M 63 57 C 75 65, 78 78, 65 92 C 55 80, 48 70, 37 57 C 49 57, 56 57, 63 57 Z" fill="white" />
+        
+        {/* Left/Top-Left Blade */}
+        <path d="M 37 57 C 22 55, 12 42, 10 21 C 25 30, 38 35, 50 35 C 43 45, 40 50, 37 57 Z" fill="white" />
+      </svg>
+    </div>
   );
 };
 
@@ -657,9 +639,27 @@ export default function App() {
     isOpenCall: false
   });
   const [isManagingGadgets, setIsManagingGadgets] = React.useState(false);
+  const [isCreatingMemberProfile, setIsCreatingMemberProfile] = React.useState(false);
+  const [newMemberForm, setNewMemberForm] = React.useState({
+    displayName: '',
+    position: 'Alumnus',
+    bio: '',
+    membership: 'Alumnus Member',
+    phoneNumber: '',
+    email: '',
+    photoURL: '',
+    privateAreaLink: '',
+    course: '',
+    interests: [] as string[],
+    skills: [] as string[],
+    previousRoles: [] as any[],
+    role: 'member' as 'admin' | 'member' | 'management',
+    status: 'active' as 'pending' | 'active' | 'rejected'
+  });
   const [isManagingAchievements, setIsManagingAchievements] = React.useState(false);
   const [isManagingFamilies, setIsManagingFamilies] = React.useState(false);
   const [isManagingSocialBodies, setIsManagingSocialBodies] = React.useState(false);
+  const [isAddSocialBodyOpen, setIsAddSocialBodyOpen] = React.useState(false);
   const [isManagingMeetings, setIsManagingMeetings] = React.useState(false);
   const [selectedGadget, setSelectedGadget] = React.useState<Gadget | null>(null);
   const [selectedAchievement, setSelectedAchievement] = React.useState<Achievement | null>(null);
@@ -1361,6 +1361,7 @@ export default function App() {
       setSocialBodyForm({ userId: '', role: '', position: 'Board', profileLink: '', contactDetails: '', term: '', isCurrent: true, year: new Date().getFullYear() });
       setSelectedSocialBodyMember(null);
       setIsManagingSocialBodies(false);
+      setIsAddSocialBodyOpen(false);
     } catch (error) {
       console.error("Error updating social body:", error);
       toast.error("Erro ao atualizar órgãos sociais.");
@@ -1938,6 +1939,69 @@ export default function App() {
     }
   };
 
+  const handleAdminCreateMember = async () => {
+    if (!newMemberForm.displayName.trim()) {
+      toast.error('O nome do membro é obrigatório.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const manualUid = `manual_${Math.random().toString(36).substr(2, 9)}`;
+      const pUrl = newMemberForm.photoURL || `https://picsum.photos/seed/${manualUid}/200`;
+      
+      const newProfile = {
+        uid: manualUid,
+        displayName: newMemberForm.displayName.trim(),
+        email: newMemberForm.email.trim() || '',
+        phoneNumber: newMemberForm.phoneNumber.trim() || '',
+        photoURL: pUrl,
+        role: newMemberForm.role,
+        status: newMemberForm.status,
+        position: newMemberForm.position.trim() || 'Alumnus',
+        membership: newMemberForm.membership,
+        teamId: (newMemberForm as any).teamId === 'none' ? null : (newMemberForm as any).teamId,
+        bio: newMemberForm.bio || '',
+        privateAreaLink: newMemberForm.privateAreaLink || '',
+        course: newMemberForm.course || '',
+        interests: newMemberForm.interests || [],
+        skills: newMemberForm.skills || [],
+        previousRoles: newMemberForm.previousRoles || [],
+        badges: [],
+        gadgets: [],
+        achievements: [],
+        completedTasks: 0,
+        activityLevel: 'Low',
+        contributionHistory: [],
+        createdAt: new Date().toISOString(),
+      };
+
+      await setDoc(doc(db, 'users', manualUid), newProfile);
+      toast.success('Perfil de membro antigo criado com sucesso!');
+      setIsCreatingMemberProfile(false);
+      setNewMemberForm({
+        displayName: '',
+        position: 'Alumnus',
+        bio: '',
+        membership: 'Alumnus Member',
+        phoneNumber: '',
+        email: '',
+        photoURL: '',
+        privateAreaLink: '',
+        course: '',
+        interests: [],
+        skills: [],
+        previousRoles: [],
+        role: 'member',
+        status: 'active'
+      });
+    } catch (error) {
+      console.error("Error creating manual member profile:", error);
+      toast.error('Erro ao criar perfil de membro antigo.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleApplyToTask = async (task: Task) => {
     if (!user) return;
     const coordName = allMembers.find(m => m.uid === task.coordinatorId)?.displayName || 'Coordenador';
@@ -2258,7 +2322,7 @@ export default function App() {
         
         <div className="relative z-10 space-y-8 flex flex-col items-center">
           <div className="space-y-6">
-            <div className="mx-auto w-44 h-44 bg-white rounded-[2.5rem] shadow-2xl flex items-center justify-center p-6 border border-zinc-100">
+            <div className="mx-auto w-44 h-44 rounded-[2.5rem] shadow-2xl overflow-hidden border border-zinc-100">
               <LoginLogo />
             </div>
             <div className="space-y-3">
@@ -2483,11 +2547,6 @@ export default function App() {
           <div className="h-10 w-10 rounded-xl bg-white shadow-sm flex items-center justify-center border border-zinc-100 cursor-pointer hover:bg-zinc-50 transition-colors" onClick={() => setActiveTab('history')}>
             <Clock className="h-5 w-5 text-red-600" />
           </div>
-          {user?.role === 'admin' && (
-            <div className="h-10 w-10 rounded-xl bg-white shadow-sm flex items-center justify-center border border-zinc-100 cursor-pointer hover:bg-zinc-50 transition-colors" onClick={() => setIsManagingMembers(true)}>
-              <UserCog className="h-5 w-5 text-zinc-600" />
-            </div>
-          )}
         </div>
       </section>
 
@@ -2636,6 +2695,106 @@ export default function App() {
           )) : (
             <p className="text-xs text-zinc-400 py-4 text-center w-full font-medium">De momento não há calls abertas. <br/> Volta mais tarde! 👋</p>
           )}
+        </div>
+      </section>
+
+      {/* Redes Sociais do BEST */}
+      <section className="space-y-3 pt-6 border-t border-zinc-100">
+        <div className="flex items-center justify-between">
+          <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest border-l-2 border-red-600 pl-2">Redes Sociais do BEST</h3>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+          <a 
+            href="https://www.instagram.com/bestalmada/" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 p-3 rounded-2xl bg-white border border-zinc-100/80 shadow-xs hover:border-pink-200 hover:bg-pink-50/20 transition-all group"
+          >
+            <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-pink-50">
+              <Instagram className="h-4.5 w-4.5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-black text-zinc-800 group-hover:text-pink-700 transition-colors">Instagram</p>
+              <p className="text-[9px] text-zinc-400 font-bold tracking-wider uppercase">@bestalmada</p>
+            </div>
+          </a>
+
+          <a 
+            href="https://www.linkedin.com/company/best-almada/" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 p-3 rounded-2xl bg-white border border-zinc-100/80 shadow-xs hover:border-blue-200 hover:bg-blue-50/20 transition-all group"
+          >
+            <div className="h-9 w-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-blue-50">
+              <Linkedin className="h-4.5 w-4.5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-black text-zinc-800 group-hover:text-blue-700 transition-colors">LinkedIn</p>
+              <p className="text-[9px] text-zinc-400 font-bold tracking-wider uppercase">BEST Almada</p>
+            </div>
+          </a>
+
+          <a 
+            href="https://www.facebook.com/bestalmada/" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 p-3 rounded-2xl bg-white border border-zinc-100/80 shadow-xs hover:border-indigo-200 hover:bg-indigo-50/20 transition-all group"
+          >
+            <div className="h-9 w-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-indigo-50">
+              <Facebook className="h-4.5 w-4.5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-black text-zinc-800 group-hover:text-indigo-700 transition-colors">Facebook</p>
+              <p className="text-[9px] text-zinc-400 font-bold tracking-wider uppercase">bestalmada</p>
+            </div>
+          </a>
+
+          <a 
+            href="https://www.tiktok.com/@bestalmada" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 p-3 rounded-2xl bg-white border border-zinc-100/80 shadow-xs hover:border-zinc-300 hover:bg-zinc-50 transition-all group"
+          >
+            <div className="h-9 w-9 rounded-xl bg-black text-white flex items-center justify-center shrink-0 shadow-sm shadow-zinc-200">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4.5 w-4.5">
+                <path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5" />
+              </svg>
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-black text-zinc-800 group-hover:text-black transition-colors">TikTok</p>
+              <p className="text-[9px] text-zinc-400 font-bold tracking-wider uppercase">@bestalmada</p>
+            </div>
+          </a>
+
+          <a 
+            href="https://x.com/AlmadaBest" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 p-3 rounded-2xl bg-white border border-zinc-100/80 shadow-xs hover:border-zinc-300 hover:bg-zinc-50 transition-all group"
+          >
+            <div className="h-9 w-9 rounded-xl bg-zinc-900 text-white flex items-center justify-center shrink-0 shadow-sm shadow-zinc-200">
+              <Twitter className="h-4.5 w-4.5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-black text-zinc-800 group-hover:text-black transition-colors">Twitter / X</p>
+              <p className="text-[9px] text-zinc-400 font-bold tracking-wider uppercase">@AlmadaBest</p>
+            </div>
+          </a>
+
+          <a 
+            href="https://sites.google.com/bestalmada.net/best-almada/home?authuser=0" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 p-3 rounded-2xl bg-white border border-zinc-100/80 shadow-xs hover:border-red-200 hover:bg-red-50/20 transition-all group"
+          >
+            <div className="h-9 w-9 rounded-xl bg-red-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-red-50">
+              <Globe className="h-4.5 w-4.5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-black text-zinc-800 group-hover:text-red-700 transition-colors">Website</p>
+              <p className="text-[9px] text-zinc-400 font-bold tracking-wider uppercase">bestalmada.net</p>
+            </div>
+          </a>
         </div>
       </section>
     </div>
@@ -4168,14 +4327,22 @@ export default function App() {
 
         {user?.role === 'admin' && (
           <div className="pt-6 border-t border-zinc-100">
-            <Dialog open={!!selectedSocialBodyMember || socialBodyForm.userId !== ''} onOpenChange={(open) => {
+            <Dialog open={isAddSocialBodyOpen} onOpenChange={(open) => {
+              setIsAddSocialBodyOpen(open);
               if (!open) {
                 setSelectedSocialBodyMember(null);
                 setSocialBodyForm({ userId: '', role: '', position: 'Board' as any, profileLink: '', contactDetails: '', term: '', isCurrent: true, year: new Date().getFullYear() });
               }
             }}>
               <DialogTrigger asChild>
-                <Button className="w-full bg-zinc-900 hover:bg-zinc-800 text-white h-14 rounded-2xl font-bold shadow-xl shadow-zinc-200">
+                <Button 
+                  className="w-full bg-zinc-900 hover:bg-zinc-800 text-white h-14 rounded-2xl font-bold shadow-xl shadow-zinc-200"
+                  onClick={() => {
+                    setSelectedSocialBodyMember(null);
+                    setSocialBodyForm({ userId: '', role: '', position: 'Board' as any, profileLink: '', contactDetails: '', term: '', isCurrent: true, year: new Date().getFullYear() });
+                    setIsAddSocialBodyOpen(true);
+                  }}
+                >
                   <Plus className="h-5 w-5 mr-2" /> Adicionar aos Órgãos Sociais
                 </Button>
               </DialogTrigger>
@@ -5090,6 +5257,39 @@ export default function App() {
               </TabsList>
 
               <TabsContent value="all" className="mt-4">
+                {user?.role === 'admin' && (
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-zinc-50 p-4 rounded-2xl border border-zinc-100/80 mb-4">
+                    <div>
+                      <h4 className="text-xs font-black uppercase tracking-widest text-zinc-800">Criação Manual de Perfis</h4>
+                      <p className="text-[10px] text-zinc-500 font-semibold leading-relaxed">Cria perfis para antigos membros ou membros que não precisam de login próprio.</p>
+                    </div>
+                    <Button 
+                      size="sm" 
+                      className="bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl font-bold text-[10px] uppercase tracking-widest h-10 px-4 shrink-0 shadow-lg shadow-zinc-200"
+                      onClick={() => {
+                        setNewMemberForm({
+                          displayName: '',
+                          position: 'Alumnus',
+                          bio: '',
+                          membership: 'Alumnus Member',
+                          phoneNumber: '',
+                          email: '',
+                          photoURL: '',
+                          privateAreaLink: '',
+                          course: '',
+                          interests: [],
+                          skills: [],
+                          previousRoles: [],
+                          role: 'member',
+                          status: 'active'
+                        });
+                        setIsCreatingMemberProfile(true);
+                      }}
+                    >
+                      <Plus className="h-4 w-4 mr-2" /> Criar Perfil Manual
+                    </Button>
+                  </div>
+                )}
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -5500,6 +5700,180 @@ export default function App() {
               )}
               <Button onClick={handleAdminUpdateMember} disabled={loading} className="w-full bg-red-600 hover:bg-red-700 font-bold h-12 rounded-2xl shadow-lg shadow-red-100">
                 {loading ? 'A guardar...' : 'Guardar'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isCreatingMemberProfile} onOpenChange={setIsCreatingMemberProfile}>
+          <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto rounded-[2rem]">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-black uppercase tracking-tight">Criar Novo Perfil de Membro</DialogTitle>
+              <DialogDescription className="text-xs font-semibold text-zinc-500">Adiciona manualmente um perfil de antigo membro (Alumnus) ou colaborador à comunidade.</DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              <div className="grid gap-4">
+                <div className="grid gap-2">
+                  <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 ml-1">Nome Completo *</Label>
+                  <Input 
+                    className="rounded-xl border-zinc-200 focus:ring-red-500" 
+                    placeholder="Ex: João Silva" 
+                    value={newMemberForm.displayName} 
+                    onChange={(e) => setNewMemberForm({...newMemberForm, displayName: e.target.value})} 
+                  />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 ml-1">Email</Label>
+                    <Input 
+                      className="rounded-xl border-zinc-200 focus:ring-red-500" 
+                      placeholder="joao@example.com" 
+                      value={newMemberForm.email} 
+                      onChange={(e) => setNewMemberForm({...newMemberForm, email: e.target.value})} 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 ml-1">Telefone</Label>
+                    <Input 
+                      className="rounded-xl border-zinc-200 focus:ring-red-500" 
+                      placeholder="912345678" 
+                      value={newMemberForm.phoneNumber} 
+                      onChange={(e) => setNewMemberForm({...newMemberForm, phoneNumber: e.target.value})} 
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 ml-1">Cargo Atual / Último Cargo</Label>
+                    <Input 
+                      className="rounded-xl border-zinc-200 focus:ring-red-500" 
+                      placeholder="Ex: Alumnus / Ex-Presidente" 
+                      value={newMemberForm.position} 
+                      onChange={(e) => setNewMemberForm({...newMemberForm, position: e.target.value})} 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 ml-1">Membership</Label>
+                    <Select value={newMemberForm.membership} onValueChange={(v) => setNewMemberForm({...newMemberForm, membership: v})}>
+                      <SelectTrigger className="rounded-xl border-zinc-200"><SelectValue /></SelectTrigger>
+                      <SelectContent className="rounded-xl">
+                        <SelectItem value="Alumnus Member">Alumnus Member</SelectItem>
+                        <SelectItem value="Full Member">Full Member</SelectItem>
+                        <SelectItem value="Baby Member">Baby Member</SelectItem>
+                        <SelectItem value="Observer">Observer</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 ml-1">Curso</Label>
+                    <Input 
+                      className="rounded-xl border-zinc-200 focus:ring-red-500" 
+                      placeholder="MIEIC" 
+                      value={newMemberForm.course} 
+                      onChange={(e) => setNewMemberForm({...newMemberForm, course: e.target.value})} 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 ml-1">URL Foto de Perfil</Label>
+                    <Input 
+                      className="rounded-xl border-zinc-200 focus:ring-red-500" 
+                      placeholder="https://..." 
+                      value={newMemberForm.photoURL} 
+                      onChange={(e) => setNewMemberForm({...newMemberForm, photoURL: e.target.value})} 
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 ml-1">Link Private Area</Label>
+                    <Input 
+                      className="rounded-xl border-zinc-200 focus:ring-red-500" 
+                      placeholder="https://..." 
+                      value={newMemberForm.privateAreaLink} 
+                      onChange={(e) => setNewMemberForm({...newMemberForm, privateAreaLink: e.target.value})} 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 ml-1">Equipa</Label>
+                    <Select value={(newMemberForm as any).teamId || 'none'} onValueChange={(v) => setNewMemberForm({...newMemberForm, teamId: v} as any)}>
+                      <SelectTrigger className="rounded-xl border-zinc-200">
+                        <SelectValue placeholder="Seleciona uma equipa" />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl">
+                        <SelectItem value="none">Sem Equipa</SelectItem>
+                        {teams.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 ml-1">Bio / Resumo do Perfil</Label>
+                  <Textarea 
+                    className="rounded-xl border-zinc-200 focus:ring-red-500 min-h-[80px]" 
+                    placeholder="Escreve uma breve nota biográfica sobre o membro..." 
+                    value={newMemberForm.bio} 
+                    onChange={(e) => setNewMemberForm({...newMemberForm, bio: e.target.value})} 
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-3">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 ml-1">Skills / Competências</Label>
+                    <div className="flex flex-wrap gap-1 p-3 border-2 border-zinc-100 rounded-[1.5rem] bg-zinc-50/50 min-h-[100px] max-h-[160px] overflow-y-auto">
+                      {dynamicSkills.map(skill => (
+                        <Badge 
+                          key={skill} 
+                          variant={newMemberForm.skills.includes(skill) ? "default" : "outline"}
+                          className={cn(
+                            "cursor-pointer rounded-xl text-[9px] font-bold py-1 px-2.5 transition-all border-2",
+                            newMemberForm.skills.includes(skill) ? "bg-red-600 hover:bg-red-700 border-red-600" : "bg-white border-zinc-200 text-zinc-500 hover:border-red-200"
+                          )}
+                          onClick={() => {
+                            const skills = newMemberForm.skills.includes(skill)
+                              ? newMemberForm.skills.filter((s: string) => s !== skill)
+                              : [...newMemberForm.skills, skill];
+                            setNewMemberForm({ ...newMemberForm, skills });
+                          }}
+                        >
+                          {skill}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <PreviousRolesManager 
+                      previousRoles={newMemberForm.previousRoles || []} 
+                      onChange={(roles) => setNewMemberForm({...newMemberForm, previousRoles: roles})} 
+                      teams={teams}
+                      events={events}
+                      dynamicSkills={dynamicSkills}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 ml-1">Interesses (separados por vírgula)</Label>
+                  <Input 
+                    className="rounded-xl border-zinc-200 focus:ring-red-500" 
+                    placeholder="Ex: Marketing, Logística, Programação" 
+                    value={newMemberForm.interests?.join(', ')} 
+                    onChange={(e) => setNewMemberForm({...newMemberForm, interests: e.target.value.split(',').map(s => s.trim()).filter(s => s)})} 
+                  />
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="pt-4 border-t border-zinc-100">
+              <Button onClick={handleAdminCreateMember} disabled={loading} className="w-full bg-red-600 hover:bg-red-700 font-bold h-12 rounded-2xl shadow-lg shadow-red-100">
+                {loading ? 'A criar...' : 'Criar Perfil'}
               </Button>
             </DialogFooter>
           </DialogContent>
